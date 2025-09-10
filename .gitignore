@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Node / React
+node_modules/
+.next/
+.vercel/
+dist/
+build/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Env and local config
+.env
+.env.*
+*.local
