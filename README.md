@@ -78,3 +78,31 @@ Student-facing frontend and an admin CLI for data ingestion. No authentication y
   ```
 - Query note: cosine distance uses the `<=>` operator in pgvector.
 
+## Step 6: RPC match_documents (vector search + JSONB filtering)
+
+- Open Supabase Studio → Database → SQL Editor.
+- Paste and run the contents of `backend/sql/004_rpc_match_documents.sql`.
+- Smoke tests:
+  - No filter:
+    ```sql
+    select *
+    from public.match_documents(
+      (select embedding from public.chunks limit 1),
+      5,
+      '{}'::jsonb
+    );
+    ```
+  - Filter by curriculum:
+    ```sql
+    select *
+    from public.match_documents(
+      (select embedding from public.chunks limit 1),
+      5,
+      jsonb_build_object('curriculum_id','<uuid>')
+    );
+    ```
+- Optional tuning: set a higher `hnsw.ef_search` for better recall (per session):
+  ```sql
+  set hnsw.ef_search = 100; -- adjust as needed
+  ```
+
