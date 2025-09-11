@@ -14,3 +14,13 @@ Student-facing frontend and an admin CLI for data ingestion. No authentication y
 - [ ] Choose initial LLM provider(s)
 - [ ] Set up ingestion pipeline outline
 - [ ] Establish development environment and tooling
+
+## Supabase setup (Step 2)
+
+- Create a Supabase project in the console and copy:
+  - Project URL
+  - anon key
+  - service_role key
+  - a Postgres connection string (session or transaction mode)
+- Paste them later into `backend/.env` (not committed), following `backend/.env.example`.
+- The `service_role` key is server-only and bypasses RLS; never expose it on the client side.

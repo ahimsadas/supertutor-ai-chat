@@ -11,3 +11,9 @@ This repository is a minimal monorepo scaffold. It will evolve as the design mat
   - `.gitignore` — repository ignore rules
 
 Note: This document will be updated as we implement components and refine the architecture.
+
+## Configuration & Secrets
+
+- `backend/.env.example` lists required variables for the backend.
+- `backend/.env` is local-only and git-ignored; do not commit real values.
+- The frontend will use public keys later via its own env file (separate from backend).
