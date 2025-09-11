@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+langchain
+langchain-openai
+langchain-anthropic
+langchain-google-genai
+langchain-deepseek
+langchain-xai
+supabase
+# (Optionally later: psycopg[binary], python-dotenv)

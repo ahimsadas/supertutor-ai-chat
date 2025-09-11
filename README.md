@@ -106,3 +106,24 @@ Student-facing frontend and an admin CLI for data ingestion. No authentication y
   set hnsw.ef_search = 100; -- adjust as needed
   ```
 
+## Backend (Step 7)
+
+- Create and activate a virtual environment, then install dependencies:
+  ```bash
+  cd backend
+  python -m venv .venv && source .venv/bin/activate
+  pip install -r requirements.txt
+  ```
+- Run the API locally:
+  ```bash
+  uvicorn app.main:app --reload --port 8000
+  ```
+- Verify health endpoint:
+  ```bash
+  curl -s http://localhost:8000/healthz
+  # {"ok": true, "service": "supertutor-backend"}
+  ```
+- Notes:
+  - Provider API keys (OpenAI/Anthropic/Google/DeepSeek/xAI) are optional for now and will be used in later steps.
+  - Supabase server-only variables `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required only when you actually request a Supabase client in code.
+
