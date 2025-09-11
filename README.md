@@ -32,3 +32,33 @@ Student-facing frontend and an admin CLI for data ingestion. No authentication y
   - (b) SQL: run `create extension if not exists vector;`
 - Verification query: `select extname from pg_extension where extname = 'vector';`
 - Run this once per Supabase project/database.
+
+## Create core DB tables (Step 4)
+
+- Open Supabase Studio → Database → SQL Editor.
+- Paste and run the contents of `backend/sql/002_schema_core.sql`.
+- Verify:
+  - Tables exist:
+    ```sql
+    select table_name
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name in ('languages','curricula','files','chunks','threads','messages')
+    order by table_name;
+    ```
+  - `chunks.embedding` type is `vector(1536)`:
+    ```sql
+    select format_type(a.atttypid, a.atttypmod) as embedding_type
+    from pg_attribute a
+    join pg_class c on c.oid = a.attrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relname = 'chunks' and a.attname = 'embedding';
+    ```
+  - `messages.citations` type is `jsonb`:
+    ```sql
+    select data_type
+    from information_schema.columns
+    where table_schema = 'public' and table_name = 'messages' and column_name = 'citations';
+    ```
+ - Note: This step does not run automatically; execute it manually in Studio (or `psql`).
+
