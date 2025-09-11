@@ -17,3 +17,8 @@ Note: This document will be updated as we implement components and refine the ar
 - `backend/.env.example` lists required variables for the backend.
 - `backend/.env` is local-only and git-ignored; do not commit real values.
 - The frontend will use public keys later via its own env file (separate from backend).
+
+## Database migrations
+
+- SQL migration stubs live under `backend/sql/`.
+- For Supabase, execute these manually via Supabase Studio SQL Editor or `psql` against the project database.
