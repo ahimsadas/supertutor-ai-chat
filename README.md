@@ -62,3 +62,19 @@ Student-facing frontend and an admin CLI for data ingestion. No authentication y
     ```
  - Note: This step does not run automatically; execute it manually in Studio (or `psql`).
 
+## Add HNSW index (Step 5)
+
+- Open Supabase Studio → Database → SQL Editor.
+- Paste and run the contents of `backend/sql/003_index_hnsw.sql`.
+- Verify the index exists:
+  ```sql
+  select indexname, indexdef
+  from pg_indexes
+  where schemaname = 'public' and tablename = 'chunks';
+  ```
+- Optional tuning (session-level):
+  ```sql
+  set hnsw.ef_search = 100; -- or use SET LOCAL inside a transaction
+  ```
+- Query note: cosine distance uses the `<=>` operator in pgvector.
+

@@ -22,3 +22,4 @@ Note: This document will be updated as we implement components and refine the ar
 
 - SQL migration stubs live under `backend/sql/`.
 - For Supabase, execute these manually via Supabase Studio SQL Editor or `psql` against the project database.
+- Vector indexes: HNSW indexes are added via `backend/sql/003_index_hnsw.sql` and can be tuned at query time using the `hnsw.ef_search` setting.
