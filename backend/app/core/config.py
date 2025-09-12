@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: Optional[str] = None
     DEEPSEEK_API_KEY: Optional[str] = None
     XAI_API_KEY: Optional[str] = None
+    # OpenRouter (OpenAI-compatible proxy)
+    OPENROUTER_API_KEY: Optional[str] = None
+    OPENROUTER_SITE_URL: Optional[str] = None   # HTTP-Referer
+    OPENROUTER_APP_TITLE: Optional[str] = None  # X-Title
 
     # Pydantic settings configuration
     model_config = SettingsConfigDict(

@@ -1,9 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from pathlib import Path
 from contextlib import asynccontextmanager
 from logging import getLogger
+from fastapi.exceptions import RequestValidationError
+from app.api.responses import ok, fail
+from app.api.errors import ProviderNotSupportedError, MissingApiKeyError
 
 # Checkpointer utilities (lazy internal imports inside functions)
 from app.checkpointing.postgres_checkpointer import (
@@ -43,7 +46,7 @@ app.add_middleware(
 
 @app.get("/healthz")
 def healthz():
-    return {"ok": True, "service": "supertutor-backend"}
+    return ok({"service": "supertutor-backend"})
 
 
 @app.get("/debug/env")
@@ -61,11 +64,13 @@ def debug_env():
     env_file_path = getattr(settings, "ENV_FILE_PATH", None)
     exists = bool(env_file_path) and Path(env_file_path).exists()
 
-    return {
-        "env_file": env_file_path,
-        "env_file_exists": bool(exists),
-        "openai_key_present": openai_present,
-    }
+    return ok(
+        {
+            "env_file": env_file_path,
+            "env_file_exists": bool(exists),
+            "openai_key_present": openai_present,
+        }
+    )
 
 
 @app.get("/debug/checkpointer")
@@ -84,4 +89,60 @@ def debug_checkpointer():
         # If env/driver not configured, report uninitialized without raising.
         initialized = False
         tables = []
-    return {"initialized": initialized, "existing_tables": tables}
+    return ok({"initialized": initialized, "existing_tables": tables})
+
+
+@app.get("/debug/provider")
+def debug_provider(provider: str | None = None, model: str | None = None, label: str | None = None):
+    """Validate provider factory construction without making network calls.
+
+    Accepts either (provider & model) or a combined label "Provider (model)".
+    Returns the normalized provider, model, and constructed class type.
+    """
+    try:
+        from app.providers.provider_factory import (
+            get_chat_model,
+            normalize_provider,
+            parse_provider_model_label,
+        )
+
+        if label and not (provider or model):
+            provider, model = parse_provider_model_label(label)
+        if not provider or not model:
+            return fail("VALIDATION_ERROR", "Both provider and model must be specified (or provide a label)", status=400)
+
+        normalized = normalize_provider(provider)
+        inst = get_chat_model(provider=normalized, model=model)
+        return ok({
+            "provider": normalized,
+            "model": model,
+            "class": type(inst).__name__,
+        })
+    except ProviderNotSupportedError as e:
+        return fail("BAD_PROVIDER", str(e), status=400)
+    except MissingApiKeyError as e:
+        return fail("CONFIG_ERROR", str(e), status=400)
+
+
+# Global exception handlers to standardize response envelope
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    detail = exc.detail
+    if isinstance(detail, dict):
+        code = detail.get("code", "HTTP_ERROR")
+        message = detail.get("message", str(detail))
+    else:
+        code = "HTTP_ERROR"
+        message = str(detail)
+    return fail(code, message, status=exc.status_code)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return fail("VALIDATION_ERROR", repr(exc.errors()), status=422)
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    # Do not leak internals
+    return fail("INTERNAL_ERROR", "Unexpected server error", status=500)
