@@ -8,4 +8,7 @@ langchain-google-genai
 langchain-deepseek
 langchain-xai
 supabase
-# (Optionally later: psycopg[binary], python-dotenv)
+langgraph
+langgraph-checkpoint-postgres
+psycopg[binary]
+# (Optionally later: python-dotenv)
