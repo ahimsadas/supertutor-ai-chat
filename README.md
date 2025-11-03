@@ -43,7 +43,7 @@ Student-facing frontend and an admin CLI for data ingestion. No authentication y
     select table_name
     from information_schema.tables
     where table_schema = 'public'
-      and table_name in ('languages','curricula','files','chunks','threads','messages')
+      and table_name in ('curricula','files','chunks','threads','messages')
     order by table_name;
     ```
   - `chunks.embedding` type is `vector(1536)`:
@@ -61,6 +61,7 @@ Student-facing frontend and an admin CLI for data ingestion. No authentication y
     where table_schema = 'public' and table_name = 'messages' and column_name = 'citations';
     ```
  - Note: This step does not run automatically; execute it manually in Studio (or `psql`).
+ - Languages are registry-defined in code (see `backend/app/languages/registry.py`). No languages table or migration is required.
 
 ## Add HNSW index (Step 5)
 
@@ -126,4 +127,10 @@ Student-facing frontend and an admin CLI for data ingestion. No authentication y
 - Notes:
   - Provider API keys (OpenAI/Anthropic/Google/DeepSeek/xAI) are optional for now and will be used in later steps.
   - Supabase server-only variables `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required only when you actually request a Supabase client in code.
+
+### Languages (registry-based)
+
+- The available languages are defined in code at `backend/app/languages/registry.py`.
+- The API `GET /languages` returns this static, read-only list (enabled entries only), ordered by `sort_order` then `name`.
+- No database seeding or CRUD exists for languages; the former `public.languages` table has been removed by migration `007_drop_languages_table.sql`.
 

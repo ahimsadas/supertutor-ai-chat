@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from app.api.responses import ok, fail
 from app.api.errors import ProviderNotSupportedError, MissingApiKeyError
 from app.api import providers as providers_api
+from app.api import languages as languages_api
 import re
 from fastapi.responses import JSONResponse
 from app.providers.registry import (
@@ -59,6 +60,27 @@ async def lifespan(app: FastAPI):
     except Exception:
         
         logger.debug("Providers report skipped due to initialization issue.")
+    try:
+        from app.languages.registry import get_enabled_languages_sorted, validate_registry
+
+        validation_ok = True
+        try:
+            validate_registry()
+        except Exception:
+            validation_ok = False
+
+        items = get_enabled_languages_sorted()
+        codes = [e["code"] for e in items]
+        logger.info(
+            "Languages report: "
+            + "source=registry "
+            + f"validation_ok={validation_ok} "
+            + f"count={len(items)} "
+            + f"codes={','.join(codes)} "
+            + "endpoints=/languages[GET]"
+        )
+    except Exception:
+        logger.debug("Languages report skipped due to initialization issue.")
     yield
 
 
@@ -74,6 +96,7 @@ app.add_middleware(
 )
 
 app.include_router(providers_api.router)
+app.include_router(languages_api.router)
 
 
 @app.get("/healthz")
@@ -159,40 +182,74 @@ def debug_provider(provider: str | None = None, model: str | None = None, label:
     try:
         from app.providers.provider_factory import get_chat_model
 
-        parsed_provider = provider
-        parsed_model = model
+        parsed_provider = None
+        parsed_model = None
+        pattern_used = None
 
-        used_label = False
-        if label:
+        label_provider = None
+        label_model = None
+        label_provided = bool(label)
+        if label_provided:
             try:
-                lp, lm = parse_provider_model_from_label(label)
-                parsed_provider, parsed_model = lp, lm
-                used_label = True
-                logger.debug("debug/provider: parsed via label")
+                label_provider, label_model = parse_provider_model_from_label(label)  # type: ignore[arg-type]
+                pattern_used = "label"
+                logger.debug("debug/provider: parsed label successfully")
+                if provider is not None or model is not None:
+                    prov_match = True
+                    if provider is not None:
+                        entry_from_label = resolve_provider_entry(label_provider)
+                        entry_from_param = resolve_provider_entry(provider)
+                        prov_match = bool(entry_from_label and entry_from_param and entry_from_label.get("id") == entry_from_param.get("id"))
+                    model_match = True if model is None else (label_model == model)
+                    if not (prov_match and model_match):
+                        logger.debug("debug/provider: param conflict between label and provider/model")
+                        logger.info(
+                            "debug/provider REPORT: pattern=label+params resolution=param_conflict action=400 PARAM_CONFLICT"
+                        )
+                        return JSONResponse(
+                            status_code=400,
+                            content={
+                                "error": {
+                                    "code": "PARAM_CONFLICT",
+                                    "message": "Conflicting query params: label vs provider/model",
+                                    "hint": "Send either 'label' or 'provider' + 'model'. If both are supplied, they must match exactly.",
+                                }
+                            },
+                        )
+                    else:
+                        if provider is not None or model is not None:
+                            logger.debug("debug/provider: redundant provider/model with label; ignoring params")
+                            pattern_used = "label+redundant"
+                parsed_provider = label_provider
+                parsed_model = label_model
             except ValueError:
-                logger.debug("debug/provider: label parse failed; attempting provider+model params")
-                pass
+                logger.debug("debug/provider: invalid label format; will attempt provider+model params")
 
         if not parsed_provider or not parsed_model:
-            logger.info(
-                f"debug/provider REPORT: provider='{parsed_provider}' model='{parsed_model}' resolution=none enabled=n/a validation=invalid_input action=400 VALIDATION_ERROR"
-            )
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Both provider and model must be specified (or provide a valid label)",
-                    }
-                },
-            )
+            if provider is None or model is None:
+                logger.info(
+                    "debug/provider REPORT: pattern=params resolution=missing_param action=400 MISSING_PARAM"
+                )
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "error": {
+                            "code": "MISSING_PARAM",
+                            "message": "Provide either 'label' or both 'provider' and 'model'.",
+                        }
+                    },
+                )
+            parsed_provider = provider
+            parsed_model = model
+            if pattern_used is None:
+                pattern_used = "params"
 
         entry = resolve_provider_entry(parsed_provider)
         if not entry:
             known = [e.get("display_name") for e in list_providers()]
             logger.debug(f"debug/provider: unknown provider '{parsed_provider}'")
             logger.info(
-                f"debug/provider REPORT: provider='{parsed_provider}' model='{parsed_model}' resolution=not_found enabled=n/a validation=unknown_provider action=400 UNKNOWN_PROVIDER"
+                f"debug/provider REPORT: pattern={pattern_used} provider='{parsed_provider}' model='{parsed_model}' resolution=unknown_provider action=400 UNKNOWN_PROVIDER"
             )
             return JSONResponse(
                 status_code=400,
@@ -210,7 +267,7 @@ def debug_provider(provider: str | None = None, model: str | None = None, label:
             _, reasons = evaluate_provider_status(entry)
             logger.debug(f"debug/provider: provider disabled — {'; '.join(reasons) if reasons else 'unknown'}")
             logger.info(
-                f"debug/provider REPORT: provider='{entry.get('id')}' model='{parsed_model}' resolution=ok enabled=false reasons={'|'.join(reasons) if reasons else ''} validation=provider_disabled action=400 PROVIDER_DISABLED"
+                f"debug/provider REPORT: pattern={pattern_used} provider='{entry.get('id')}' model='{parsed_model}' resolution=provider_disabled reasons={'|'.join(reasons) if reasons else ''} action=400 PROVIDER_DISABLED"
             )
             return JSONResponse(
                 status_code=400,
@@ -229,7 +286,7 @@ def debug_provider(provider: str | None = None, model: str | None = None, label:
                 f"debug/provider: invalid model '{parsed_model}' for provider '{entry.get('id')}'"
             )
             logger.info(
-                f"debug/provider REPORT: provider='{entry.get('id')}' model='{parsed_model}' resolution=ok enabled=true validation=invalid_model action=400 INVALID_MODEL"
+                f"debug/provider REPORT: pattern={pattern_used} provider='{entry.get('id')}' model='{parsed_model}' resolution=invalid_model action=400 INVALID_MODEL"
             )
             return JSONResponse(
                 status_code=400,
@@ -249,7 +306,7 @@ def debug_provider(provider: str | None = None, model: str | None = None, label:
             f"debug/provider: validated provider='{entry.get('id')}', model='{parsed_model}' — constructing factory"
         )
         logger.info(
-            f"debug/provider REPORT: provider='{entry.get('id')}' model='{parsed_model}' resolution=ok enabled=true validation=ok action=200 CONTINUE_FACTORY class={type(inst).__name__}"
+            f"debug/provider REPORT: pattern={pattern_used} provider='{entry.get('id')}' model='{parsed_model}' resolution=ok enabled=true validation=ok action=200 CONTINUE_FACTORY class={type(inst).__name__}"
         )
         return ok({
             "provider": entry.get("id"),

@@ -3,15 +3,6 @@
 -- Execute this script manually in Supabase Studio (SQL Editor) or via psql.
 -- ANN indexes (HNSW/IVFFlat) for embeddings will be added later.
 
--- languages
-create table if not exists public.languages (
-  code text primary key,
-  name text not null,
-  rtl boolean not null default false,
-  enabled boolean not null default true,
-  sort_order int not null default 0,
-  created_at timestamptz not null default now()
-);
 
 -- curricula
 create table if not exists public.curricula (
@@ -51,7 +42,7 @@ create table if not exists public.threads (
   curriculum_id uuid not null references public.curricula(id) on delete cascade,
   provider text not null,
   model text not null,
-  language_code text not null default 'auto' references public.languages(code) on update cascade on delete restrict,
+  language_code text not null default 'auto',
   created_at timestamptz not null default now()
 );
 create index if not exists idx_threads_curriculum_id on public.threads (curriculum_id);
