@@ -28,7 +28,9 @@ supertutor-ai-chat/
 │   │   │   └── curricula.py
 │   │   ├── cli
 │   │   │   ├── __init__.py
-│   │   │   └── curricula.py
+│   │   │   ├── curricula.py
+│   │   │   ├── ingest.py
+│   │   │   └── files.py
 │   │   ├── checkpointing
 │   │   │   ├── __init__.py
 │   │   │   └── postgres_checkpointer.py
@@ -54,7 +56,8 @@ supertutor-ai-chat/
 │   │   ├── 001_enable_pgvector.sql
 │   │   ├── 002_schema_core.sql
 │   │   ├── 003_index_hnsw.sql
-│   │   └── 004_rpc_match_documents.sql
+│   │   ├── 004_rpc_match_documents.sql
+│   │   └── 005_files_chunks_constraints.sql
 │   ├── tests
 │   ├── .env
 │   ├── .env.example

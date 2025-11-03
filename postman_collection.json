@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "SuperTutor Backend (Local)",
-    "description": "Postman collection for SuperTutor backend. Paste this JSON into Postman (Import > Raw Text). Uses {{scheme}}://{{host}}:{{port}} for server URL.",
+    "description": "Postman collection for SuperTutor backend. Paste this JSON into Postman (Import > Raw Text). Uses {{scheme}}://{{host}}:{{port}} for server URL.\n\nCLI parity: you can upload files via the admin CLI: python -m app.cli.ingest upload --curriculum-id <UUID> <file1> <file2> ...\nFiles CLI: list/delete mirror these endpoints, e.g., python -m app.cli.files list --curriculum-id <UUID> and python -m app.cli.files delete --id <UUID>",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -30,6 +30,41 @@
               "host": ["{{host}}"],
               "port": "{{port}}",
               "path": ["providers"]
+            }
+          }
+        },
+        {
+          "name": "GET /files",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/files?curriculum_id={{curriculum_id}}",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["files"],
+              "query": [
+                { "key": "curriculum_id", "value": "{{curriculum_id}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /files/{id}",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/files/{{file_id}}",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["files", "{{file_id}}"]
             }
           }
         }
@@ -112,6 +147,53 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "DELETE /curricula/{id}?force=true",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/curricula/{{curriculum_id}}?force=true",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["curricula", "{{curriculum_id}}"],
+              "query": [
+                { "key": "force", "value": "true" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Files",
+      "item": [
+        {
+          "name": "POST /files:ingest",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "curriculum_id", "value": "{{curriculum_id}}", "type": "text" },
+                { "key": "files", "type": "file", "src": [] }
+              ]
+            },
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/files:ingest",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["files:ingest"]
+            }
+          }
         }
       ]
     },

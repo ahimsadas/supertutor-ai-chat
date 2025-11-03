@@ -159,3 +159,49 @@ Exit codes:
 - `create`: 0 on 200/201; 2 on 409 duplicate; 1 on other errors.
 - `delete`: 0 on 200/204; 3 on 404 not found; 4 on 409 forbidden delete; 1 on other errors.
 
+
+### Admin CLI: Ingestion
+
+- A Typer-based CLI to upload source documents to the backend ingestion route.
+- Module: `backend/app/cli/ingest.py` (run with `python -m app.cli.ingest ...` from `backend/`).
+- Base URL is read from env `BACKEND_BASE_URL` (default `http://localhost:8000`).
+- Local size cap is read from env `FILES_INGEST_MAX_MB` (float supported, default `50`).
+
+Examples:
+
+```bash
+# Upload one or more files to a curriculum
+python -m app.cli.ingest upload --curriculum-id <uuid> ./samples/a.pdf ./samples/b.txt
+
+# With a smaller local cap (100KB)
+FILES_INGEST_MAX_MB=0.1 python -m app.cli.ingest upload --curriculum-id <uuid> ./samples/a.pdf
+```
+
+Behavior:
+
+- Only .pdf and .txt are accepted by the CLI and server.
+- The CLI streams and prints each file's sha256 before sending.
+- On server success, prints the JSON response (including `deduped` and `ingestion_status`).
+- If the server path is missing, prints a helpful 404 message.
+
+
+### Admin CLI: Files
+
+- Manage files via backend endpoints.
+- Module: `backend/app/cli/files.py` (run with `python -m app.cli.files ...` from `backend/`).
+- Base URL is read from env `BACKEND_BASE_URL` (default `http://localhost:8000`).
+
+Examples:
+
+```bash
+# List files for a curriculum
+python -m app.cli.files list --curriculum-id <uuid>
+
+# Delete a file by id (will cascade-delete its chunks)
+python -m app.cli.files delete --id <uuid>
+```
+
+Exit codes:
+
+- `list`: 0 on 200; 1 on 404 (curriculum not found); 3 on other errors / network.
+- `delete`: 0 on 200; 1 on 404 (file not found); 2 on 409 conflict; 3 on other errors / network.

@@ -10,6 +10,7 @@ from app.api.errors import ProviderNotSupportedError, MissingApiKeyError
 from app.api import providers as providers_api
 from app.api import languages as languages_api
 from app.api import curricula as curricula_api
+from app.api import files as files_api
 import re
 from fastapi.responses import JSONResponse
 from app.providers.registry import (
@@ -99,6 +100,7 @@ app.add_middleware(
 app.include_router(providers_api.router)
 app.include_router(languages_api.router)
 app.include_router(curricula_api.router)
+app.include_router(files_api.router)
 
 
 @app.get("/healthz")

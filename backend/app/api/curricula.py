@@ -8,6 +8,9 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from app.clients.supabase_client import get_supabase_client
+from app.core.config import get_settings
+import psycopg  # type: ignore
+from psycopg.rows import dict_row  # type: ignore
 
 
 logger = getLogger("supertutor.curricula")
@@ -37,6 +40,133 @@ def _escape_like_pattern(s: str) -> str:
     s = s.replace("%", "\\%")
     s = s.replace("_", "\\_")
     return s
+
+
+_FK_CASCADE_CHUNKS_FILES: Optional[bool] = None
+
+
+def _get_db_uri() -> Optional[str]:
+    try:
+        settings = get_settings()
+        return settings.SUPABASE_DB_URL
+    except Exception:
+        return None
+
+
+def _curriculum_exists(curriculum_id: str) -> bool:
+    return bool(get_curriculum(curriculum_id))
+
+
+def _counts_for_curriculum_tx(cur, curriculum_id: str) -> dict:
+    cur.execute(
+        "SELECT count(*) AS c FROM public.files WHERE curriculum_id = %s",
+        (curriculum_id,),
+    )
+    files_count = int(cur.fetchone()["c"])
+    cur.execute(
+        """
+        SELECT count(*) AS c
+        FROM public.chunks ch
+        JOIN public.files f ON f.id = ch.file_id
+        WHERE f.curriculum_id = %s
+        """,
+        (curriculum_id,),
+    )
+    chunks_count = int(cur.fetchone()["c"])
+    cur.execute(
+        "SELECT count(*) AS c FROM public.threads WHERE curriculum_id = %s",
+        (curriculum_id,),
+    )
+    threads_count = int(cur.fetchone()["c"])
+    return {"files": files_count, "chunks": chunks_count, "threads": threads_count}
+
+
+def _counts_for_curriculum(curriculum_id: str) -> dict:
+    db_uri = _get_db_uri()
+    if db_uri:
+        with psycopg.connect(db_uri, autocommit=True, row_factory=dict_row) as conn:  # type: ignore
+            with conn.cursor() as cur:  # type: ignore
+                return _counts_for_curriculum_tx(cur, curriculum_id)
+    client = get_supabase_client()
+    files_count = count_files_for_curriculum(curriculum_id)
+    threads_count = count_threads_for_curriculum(curriculum_id)
+    files_res = (
+        client.table("files").select("id").eq("curriculum_id", curriculum_id).execute()
+    )
+    file_ids = [r["id"] for r in (files_res.data or [])]
+    chunks_count = 0
+    if file_ids:
+        chunks_res = (
+            client.table("chunks")
+            .select("id", count="exact")
+            .in_("file_id", file_ids)
+            .execute()
+        )
+        cnt = getattr(chunks_res, "count", None)
+        chunks_count = int(cnt) if cnt is not None else len(chunks_res.data or [])
+    return {"files": files_count, "chunks": chunks_count, "threads": threads_count}
+
+
+def _has_fk_cascade_chunks_to_files() -> bool:
+    global _FK_CASCADE_CHUNKS_FILES
+    if _FK_CASCADE_CHUNKS_FILES is not None:
+        return _FK_CASCADE_CHUNKS_FILES
+    db_uri = _get_db_uri()
+    if not db_uri:
+        _FK_CASCADE_CHUNKS_FILES = False
+        return False
+    try:
+        with psycopg.connect(db_uri, autocommit=True, row_factory=dict_row) as conn:  # type: ignore
+            with conn.cursor() as cur:  # type: ignore
+                cur.execute(
+                    """
+                    SELECT c.confdeltype
+                    FROM pg_constraint c
+                    JOIN pg_class t ON t.oid = c.conrelid
+                    JOIN pg_namespace tn ON tn.oid = t.relnamespace
+                    JOIN pg_class r ON r.oid = c.confrelid
+                    JOIN pg_namespace rn ON rn.oid = r.relnamespace
+                    WHERE c.contype='f'
+                      AND tn.nspname='public' AND t.relname='chunks'
+                      AND rn.nspname='public' AND r.relname='files'
+                    LIMIT 1
+                    """
+                )
+                row = cur.fetchone()
+                _FK_CASCADE_CHUNKS_FILES = bool(row and row.get("confdeltype") == "c")
+                return bool(_FK_CASCADE_CHUNKS_FILES)
+    except Exception:
+        _FK_CASCADE_CHUNKS_FILES = False
+        return False
+
+
+def _delete_files_and_chunks_for_curriculum(curriculum_id: str, has_fk_cascade: bool, cur=None) -> None:
+    if cur is not None:
+        if not has_fk_cascade:
+            cur.execute(
+                "DELETE FROM public.chunks WHERE file_id IN (SELECT id FROM public.files WHERE curriculum_id = %s)",
+                (curriculum_id,),
+            )
+        cur.execute(
+            "DELETE FROM public.files WHERE curriculum_id = %s",
+            (curriculum_id,),
+        )
+        return
+    db_uri = _get_db_uri()
+    if not db_uri:
+        return
+    with psycopg.connect(db_uri, autocommit=False, row_factory=dict_row) as conn:  # type: ignore
+        with conn.cursor() as _cur:  # type: ignore
+            if not has_fk_cascade:
+                _cur.execute(
+                    "DELETE FROM public.chunks WHERE file_id IN (SELECT id FROM public.files WHERE curriculum_id = %s)",
+                    (curriculum_id,),
+                )
+            _cur.execute(
+                "DELETE FROM public.files WHERE curriculum_id = %s",
+                (curriculum_id,),
+            )
+            conn.commit()
 
 
 def list_curricula() -> List[dict]:
@@ -178,7 +308,7 @@ def create_curriculum_route(body: CreateCurriculumBody) -> CurriculumOut:
 
 
 @router.delete("/curricula/{curriculum_id}")
-def delete_curriculum_route(curriculum_id: str):
+def delete_curriculum_route(curriculum_id: str, force: bool = False):
     row = get_curriculum(curriculum_id)
     if not row:
         return JSONResponse(
@@ -188,21 +318,100 @@ def delete_curriculum_route(curriculum_id: str):
             },
         )
 
-    files_count = count_files_for_curriculum(curriculum_id)
-    threads_count = count_threads_for_curriculum(curriculum_id)
+    if not force:
+        files_count = count_files_for_curriculum(curriculum_id)
+        threads_count = count_threads_for_curriculum(curriculum_id)
+        if files_count > 0 or threads_count > 0:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": {
+                        "code": "FORBIDDEN_DELETE",
+                        "message": "Curriculum has related data",
+                        "counts": {"files": files_count, "threads": threads_count},
+                    }
+                },
+            )
+        delete_curriculum(curriculum_id)
+        logger.debug("curricula.delete: id=%s force=false files=%d chunks=%d threads=%d", curriculum_id, 0, 0, 0)
+        return Response(status_code=204)
 
-    if files_count > 0 or threads_count > 0:
+    db_uri = _get_db_uri()
+    has_fk = _has_fk_cascade_chunks_to_files()
+    if db_uri:
+        with psycopg.connect(db_uri, autocommit=False, row_factory=dict_row) as conn:  # type: ignore
+            with conn.cursor() as cur:  # type: ignore
+                counts = _counts_for_curriculum_tx(cur, curriculum_id)
+                if counts.get("threads", 0) > 0:
+                    conn.rollback()
+                    return JSONResponse(
+                        status_code=409,
+                        content={
+                            "error": {
+                                "code": "FORBIDDEN_DELETE_THREADS",
+                                "message": "Curriculum has active threads",
+                                "counts": counts,
+                            }
+                        },
+                    )
+                if counts.get("files", 0) > 0:
+                    _delete_files_and_chunks_for_curriculum(curriculum_id, has_fk, cur=cur)
+                cur.execute("DELETE FROM public.curricula WHERE id = %s", (curriculum_id,))
+                conn.commit()
+                logger.debug(
+                    "curricula.delete: id=%s force=true files=%d chunks=%d threads=%d",
+                    curriculum_id,
+                    counts.get("files", 0),
+                    counts.get("chunks", 0),
+                    counts.get("threads", 0),
+                )
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "deleted": {
+                            "curriculum_id": curriculum_id,
+                            "files": counts.get("files", 0),
+                            "chunks": counts.get("chunks", 0),
+                            "threads": 0,
+                        }
+                    },
+                )
+
+    client = get_supabase_client()
+    counts = _counts_for_curriculum(curriculum_id)
+    if counts.get("threads", 0) > 0:
         return JSONResponse(
             status_code=409,
             content={
                 "error": {
-                    "code": "FORBIDDEN_DELETE",
-                    "message": "Curriculum has related data",
-                    "counts": {"files": files_count, "threads": threads_count},
+                    "code": "FORBIDDEN_DELETE_THREADS",
+                    "message": "Curriculum has active threads",
+                    "counts": counts,
                 }
             },
         )
-
-    delete_curriculum(curriculum_id)
-    logger.debug("curricula.delete: deleted %s", curriculum_id)
-    return Response(status_code=204)
+    if counts.get("files", 0) > 0:
+        files_res = client.table("files").select("id").eq("curriculum_id", curriculum_id).execute()
+        file_ids = [r["id"] for r in (files_res.data or [])]
+        if file_ids and not has_fk:
+            client.table("chunks").delete().in_("file_id", file_ids).execute()
+        client.table("files").delete().eq("curriculum_id", curriculum_id).execute()
+    client.table("curricula").delete().eq("id", curriculum_id).execute()
+    logger.debug(
+        "curricula.delete: id=%s force=true files=%d chunks=%d threads=%d",
+        curriculum_id,
+        counts.get("files", 0),
+        counts.get("chunks", 0),
+        counts.get("threads", 0),
+    )
+    return JSONResponse(
+        status_code=200,
+        content={
+            "deleted": {
+                "curriculum_id": curriculum_id,
+                "files": counts.get("files", 0),
+                "chunks": counts.get("chunks", 0),
+                "threads": 0,
+            }
+        },
+    )
