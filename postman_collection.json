@@ -8,9 +8,10 @@
     { "key": "scheme", "value": "http" },
     { "key": "host", "value": "localhost" },
     { "key": "port", "value": "8000" },
-    { "key": "provider", "value": "" },
-    { "key": "model", "value": "" },
-    { "key": "label", "value": "" }
+    { "key": "provider", "value": "google" },
+    { "key": "model", "value": "gemini-2.0-flash" },
+    { "key": "label", "value": "Google(gemini-2.0-flash)" },
+    { "key": "curriculum_id", "value": "" }
   ],
   "item": [
     {
@@ -52,6 +53,65 @@
               "path": ["languages"]
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "Curricula",
+      "item": [
+        {
+          "name": "GET /curricula",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/curricula",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["curricula"]
+            }
+          }
+        },
+        {
+          "name": "POST /curricula",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sample Curriculum\"\n}"
+            },
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/curricula",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["curricula"]
+            }
+          }
+        },
+        {
+          "name": "DELETE /curricula/{id}",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/curricula/{{curriculum_id}}",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["curricula", "{{curriculum_id}}"]
+            }
+          },
+          "response": []
         }
       ]
     },
