@@ -24,7 +24,11 @@ supertutor-ai-chat/
 │   │   │   ├── languages.py
 │   │   │   ├── providers.py
 │   │   │   ├── responses.py
-│   │   │   └── schemas.py
+│   │   │   ├── schemas.py
+│   │   │   └── curricula.py
+│   │   ├── cli
+│   │   │   ├── __init__.py
+│   │   │   └── curricula.py
 │   │   ├── checkpointing
 │   │   │   ├── __init__.py
 │   │   │   └── postgres_checkpointer.py
@@ -60,7 +64,8 @@ supertutor-ai-chat/
 │   └── .gitkeep
 ├── .gitignore
 ├── ARCHITECTURE.md
-└── README.md
+├── README.md
+└── postman_collection.json
 ```
 
 - Excludes from tree for signal-to-noise: `.git`, `node_modules`, `.venv`, `venv`, `__pycache__`, `.mypy_cache`, `.pytest_cache`, `.idea`, `.vscode`, `dist`, `build`, `.DS_Store`.

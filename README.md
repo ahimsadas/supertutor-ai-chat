@@ -3,7 +3,7 @@
 An AI RAG chatbot MVP using LangChain with Supabase pgvector, supporting multi-provider LLM switching, citations, and a React UI.
 
 ## Monorepo layout
-- `backend/` — Python backend (to be implemented)
+- `backend/` — FastAPI backend with Supabase (providers, languages, curricula endpoints)
 - `frontend/` — React frontend (to be implemented)
 
 ## MVP scope
@@ -133,4 +133,29 @@ Student-facing frontend and an admin CLI for data ingestion. No authentication y
 - The available languages are defined in code at `backend/app/languages/registry.py`.
 - The API `GET /languages` returns this static, read-only list (enabled entries only), ordered by `sort_order` then `name`.
 - No database seeding or CRUD exists for languages; the former `public.languages` table has been removed by migration `007_drop_languages_table.sql`.
+
+### Admin CLI: Curricula
+
+- A minimal Typer-based CLI is available to manage curricula via the REST API.
+- Module: `backend/app/cli/curricula.py` (run with `python -m app.cli.curricula ...` from `backend/`).
+- Base URL is read from env `BACKEND_BASE_URL` (default `http://localhost:8000`).
+
+Examples:
+
+```bash
+# List curricula
+python -m app.cli.curricula list
+
+# Create a curriculum
+python -m app.cli.curricula create --name "JEE Physics"
+
+# Delete a curriculum by id
+python -m app.cli.curricula delete --id <uuid>
+```
+
+Exit codes:
+
+- `list`: 0 on success; 1 on HTTP errors.
+- `create`: 0 on 200/201; 2 on 409 duplicate; 1 on other errors.
+- `delete`: 0 on 200/204; 3 on 404 not found; 4 on 409 forbidden delete; 1 on other errors.
 
