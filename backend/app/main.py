@@ -7,6 +7,7 @@ from logging import getLogger
 from fastapi.exceptions import RequestValidationError
 from app.api.responses import ok, fail
 from app.api.errors import ProviderNotSupportedError, MissingApiKeyError
+from app.api import providers as providers_api
 
 # Checkpointer utilities (lazy internal imports inside functions)
 from app.checkpointing.postgres_checkpointer import (
@@ -29,6 +30,28 @@ async def lifespan(app: FastAPI):
     except Exception as _:
         # Do not leak secrets/DSNs; keep log minimal.
         logger.error("Checkpointer setup skipped due to initialization error.")
+    
+    try:
+        from app.providers.registry import list_providers, evaluate_provider_status
+
+        entries = list_providers()
+        # Sort by display name for deterministic report
+        entries = sorted(entries, key=lambda e: (e.get("display_name") or ""))
+        parts: list[str] = []
+        for e in entries:
+            enabled, reasons = evaluate_provider_status(e)
+            name = e.get("display_name") or e.get("id")
+            models = e.get("models") or []
+            if enabled:
+                status = "enabled"
+            else:
+                status = "disabled: " + "; ".join(reasons) if reasons else "disabled"
+            parts.append(f"{name} ({status}) — {len(models)} models")
+        if parts:
+            logger.info("Providers report: " + " | ".join(parts))
+    except Exception:
+        
+        logger.debug("Providers report skipped due to initialization issue.")
     yield
 
 
@@ -42,6 +65,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(providers_api.router)
 
 
 @app.get("/healthz")
