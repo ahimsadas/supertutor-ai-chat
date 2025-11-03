@@ -40,6 +40,13 @@ LANGUAGES: List[Language] = [
         "enabled": True,
         "sort_order": 2,
     },
+    {
+        "code": "ta",
+        "name": "Tamil",
+        "rtl": False,
+        "enabled": True,
+        "sort_order": 3,
+    },
 ]
 
 

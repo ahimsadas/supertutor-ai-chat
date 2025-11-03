@@ -12,6 +12,59 @@ This repository is a minimal monorepo scaffold. It will evolve as the design mat
 
 Note: This document will be updated as we implement components and refine the architecture.
 
+## Full Project Structure
+
+```text
+supertutor-ai-chat/
+├── backend
+│   ├── app
+│   │   ├── api
+│   │   │   ├── __init__.py
+│   │   │   ├── errors.py
+│   │   │   ├── languages.py
+│   │   │   ├── providers.py
+│   │   │   ├── responses.py
+│   │   │   └── schemas.py
+│   │   ├── checkpointing
+│   │   │   ├── __init__.py
+│   │   │   └── postgres_checkpointer.py
+│   │   ├── clients
+│   │   │   ├── __init__.py
+│   │   │   └── supabase_client.py
+│   │   ├── core
+│   │   │   ├── __init__.py
+│   │   │   └── config.py
+│   │   ├── languages
+│   │   │   ├── __init__.py
+│   │   │   └── registry.py
+│   │   ├── providers
+│   │   │   ├── __init__.py
+│   │   │   ├── provider_factory.py
+│   │   │   └── registry.py
+│   │   ├── __init__.py
+│   │   └── main.py
+│   ├── config
+│   ├── routers
+│   ├── services
+│   ├── sql
+│   │   ├── 001_enable_pgvector.sql
+│   │   ├── 002_schema_core.sql
+│   │   ├── 003_index_hnsw.sql
+│   │   └── 004_rpc_match_documents.sql
+│   ├── tests
+│   ├── .env
+│   ├── .env.example
+│   ├── .gitkeep
+│   └── requirements.txt
+├── frontend
+│   └── .gitkeep
+├── .gitignore
+├── ARCHITECTURE.md
+└── README.md
+```
+
+- Excludes from tree for signal-to-noise: `.git`, `node_modules`, `.venv`, `venv`, `__pycache__`, `.mypy_cache`, `.pytest_cache`, `.idea`, `.vscode`, `dist`, `build`, `.DS_Store`.
+
 ## Configuration & Secrets
 
 - `backend/.env.example` lists required variables for the backend.

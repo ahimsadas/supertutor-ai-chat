@@ -1,0 +1,158 @@
+{
+  "info": {
+    "name": "SuperTutor Backend (Local)",
+    "description": "Postman collection for SuperTutor backend. Paste this JSON into Postman (Import > Raw Text). Uses {{scheme}}://{{host}}:{{port}} for server URL.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "scheme", "value": "http" },
+    { "key": "host", "value": "localhost" },
+    { "key": "port", "value": "8000" },
+    { "key": "provider", "value": "" },
+    { "key": "model", "value": "" },
+    { "key": "label", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Providers",
+      "item": [
+        {
+          "name": "GET /providers",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/providers",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["providers"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Languages",
+      "item": [
+        {
+          "name": "GET /languages",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/languages",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["languages"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /healthz",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/healthz",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["healthz"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Debug",
+      "item": [
+        {
+          "name": "GET /debug/env",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/debug/env",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["debug", "env"]
+            }
+          }
+        },
+        {
+          "name": "GET /debug/checkpointer",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/debug/checkpointer",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["debug", "checkpointer"]
+            }
+          }
+        },
+        {
+          "name": "GET /debug/provider (provider+model)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/debug/provider?provider={{provider}}&model={{model}}",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["debug", "provider"],
+              "query": [
+                { "key": "provider", "value": "{{provider}}" },
+                { "key": "model", "value": "{{model}}" }
+              ]
+            },
+            "description": "Validate provider factory with separate provider and model query params."
+          }
+        },
+        {
+          "name": "GET /debug/provider (label)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{scheme}}://{{host}}:{{port}}/debug/provider?label={{label}}",
+              "protocol": "{{scheme}}",
+              "host": ["{{host}}"],
+              "port": "{{port}}",
+              "path": ["debug", "provider"],
+              "query": [
+                { "key": "label", "value": "{{label}}" }
+              ]
+            },
+            "description": "Validate provider factory using a combined label like 'OpenAI (gpt-4o-mini)'."
+          }
+        }
+      ]
+    }
+  ]
+}
