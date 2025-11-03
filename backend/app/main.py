@@ -8,6 +8,13 @@ from fastapi.exceptions import RequestValidationError
 from app.api.responses import ok, fail
 from app.api.errors import ProviderNotSupportedError, MissingApiKeyError
 from app.api import providers as providers_api
+import re
+from fastapi.responses import JSONResponse
+from app.providers.registry import (
+    list_providers,
+    evaluate_provider_enabled,
+    evaluate_provider_status,
+)
 
 # Checkpointer utilities (lazy internal imports inside functions)
 from app.checkpointing.postgres_checkpointer import (
@@ -117,6 +124,31 @@ def debug_checkpointer():
     return ok({"initialized": initialized, "existing_tables": tables})
 
 
+def parse_provider_model_from_label(label: str) -> tuple[str, str]:
+    pattern = re.compile(r"^\s*(?P<provider>[^()]+?)\s*\(\s*(?P<model>[^()]+)\s*\)\s*$")
+    m = pattern.match(label or "")
+    if not m:
+        raise ValueError("Invalid label format")
+    prov = (m.group("provider") or "").strip()
+    model = (m.group("model") or "").strip()
+    if not prov or not model:
+        raise ValueError("Invalid label format")
+    return prov, model
+
+
+def resolve_provider_entry(name_or_id: str):
+    q = (name_or_id or "").strip().lower()
+    if not q:
+        return None
+    entries = list_providers()
+    for e in entries:
+        if (e.get("id") or "").lower() == q:
+            return e
+        if (e.get("display_name") or "").lower() == q:
+            return e
+    return None
+
+
 @app.get("/debug/provider")
 def debug_provider(provider: str | None = None, model: str | None = None, label: str | None = None):
     """Validate provider factory construction without making network calls.
@@ -125,28 +157,117 @@ def debug_provider(provider: str | None = None, model: str | None = None, label:
     Returns the normalized provider, model, and constructed class type.
     """
     try:
-        from app.providers.provider_factory import (
-            get_chat_model,
-            normalize_provider,
-            parse_provider_model_label,
+        from app.providers.provider_factory import get_chat_model
+
+        parsed_provider = provider
+        parsed_model = model
+
+        used_label = False
+        if label:
+            try:
+                lp, lm = parse_provider_model_from_label(label)
+                parsed_provider, parsed_model = lp, lm
+                used_label = True
+                logger.debug("debug/provider: parsed via label")
+            except ValueError:
+                logger.debug("debug/provider: label parse failed; attempting provider+model params")
+                pass
+
+        if not parsed_provider or not parsed_model:
+            logger.info(
+                f"debug/provider REPORT: provider='{parsed_provider}' model='{parsed_model}' resolution=none enabled=n/a validation=invalid_input action=400 VALIDATION_ERROR"
+            )
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Both provider and model must be specified (or provide a valid label)",
+                    }
+                },
+            )
+
+        entry = resolve_provider_entry(parsed_provider)
+        if not entry:
+            known = [e.get("display_name") for e in list_providers()]
+            logger.debug(f"debug/provider: unknown provider '{parsed_provider}'")
+            logger.info(
+                f"debug/provider REPORT: provider='{parsed_provider}' model='{parsed_model}' resolution=not_found enabled=n/a validation=unknown_provider action=400 UNKNOWN_PROVIDER"
+            )
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": {
+                        "code": "UNKNOWN_PROVIDER",
+                        "message": f"Unknown provider '{parsed_provider}'",
+                        "known_providers": known,
+                    }
+                },
+            )
+
+        enabled = evaluate_provider_enabled(entry)
+        if not enabled:
+            _, reasons = evaluate_provider_status(entry)
+            logger.debug(f"debug/provider: provider disabled — {'; '.join(reasons) if reasons else 'unknown'}")
+            logger.info(
+                f"debug/provider REPORT: provider='{entry.get('id')}' model='{parsed_model}' resolution=ok enabled=false reasons={'|'.join(reasons) if reasons else ''} validation=provider_disabled action=400 PROVIDER_DISABLED"
+            )
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": {
+                        "code": "PROVIDER_DISABLED",
+                        "message": f"Provider '{entry.get('display_name')}' is disabled",
+                        "reasons": reasons or [],
+                    }
+                },
+            )
+
+        allowed = entry.get("models") or []
+        if parsed_model not in allowed:
+            logger.debug(
+                f"debug/provider: invalid model '{parsed_model}' for provider '{entry.get('id')}'"
+            )
+            logger.info(
+                f"debug/provider REPORT: provider='{entry.get('id')}' model='{parsed_model}' resolution=ok enabled=true validation=invalid_model action=400 INVALID_MODEL"
+            )
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": {
+                        "code": "INVALID_MODEL",
+                        "message": f"Model '{parsed_model}' is not in the allow-list for provider '{entry.get('display_name')}'",
+                        "provider": entry.get("id"),
+                        "requested_model": parsed_model,
+                        "allowed_models": allowed,
+                    }
+                },
+            )
+
+        inst = get_chat_model(provider=entry.get("id"), model=parsed_model)
+        logger.debug(
+            f"debug/provider: validated provider='{entry.get('id')}', model='{parsed_model}' — constructing factory"
         )
-
-        if label and not (provider or model):
-            provider, model = parse_provider_model_label(label)
-        if not provider or not model:
-            return fail("VALIDATION_ERROR", "Both provider and model must be specified (or provide a label)", status=400)
-
-        normalized = normalize_provider(provider)
-        inst = get_chat_model(provider=normalized, model=model)
+        logger.info(
+            f"debug/provider REPORT: provider='{entry.get('id')}' model='{parsed_model}' resolution=ok enabled=true validation=ok action=200 CONTINUE_FACTORY class={type(inst).__name__}"
+        )
         return ok({
-            "provider": normalized,
-            "model": model,
+            "provider": entry.get("id"),
+            "model": parsed_model,
             "class": type(inst).__name__,
         })
     except ProviderNotSupportedError as e:
-        return fail("BAD_PROVIDER", str(e), status=400)
+        logger.debug(f"debug/provider: factory error — {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={"error": {"code": "BAD_PROVIDER", "message": str(e)}},
+        )
     except MissingApiKeyError as e:
-        return fail("CONFIG_ERROR", str(e), status=400)
+        logger.debug(f"debug/provider: config error — {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={"error": {"code": "CONFIG_ERROR", "message": str(e)}},
+        )
 
 
 # Global exception handlers to standardize response envelope
