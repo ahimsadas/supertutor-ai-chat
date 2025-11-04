@@ -205,3 +205,34 @@ Exit codes:
 
 - `list`: 0 on 200; 1 on 404 (curriculum not found); 3 on other errors / network.
 - `delete`: 0 on 200; 1 on 404 (file not found); 2 on 409 conflict; 3 on other errors / network.
+
+### Ingestion Job Runner
+
+- Scans recent files (or a specific file) and runs the PDF/TXT loading layer, then hands pages to the chunker.
+- Storage directory is read from env `FILES_STORAGE_DIR` (default `backend/storage/files`). The CLI prints it at startup.
+- If the chunker is not implemented yet, items are marked as `skipped` with reason `chunker-missing` and a warning is logged.
+
+CLI usage:
+
+```bash
+# Dry-run: list/validate without processing
+python -m app.cli.ingestion_jobs run --limit 5 --dry-run
+
+# Process a specific file (skips if chunks already exist)
+python -m app.cli.ingestion_jobs run --file-id <uuid>
+
+# Filter by curriculum and scan up to 20 recent files
+python -m app.cli.ingestion_jobs run --curriculum-id <uuid> --limit 20
+```
+
+Exit codes:
+
+- 0: success and no errors in summary
+- 2: one or more items had `errors > 0`
+- 1: invalid inputs or runner-level error
+
+### Loading Layer
+
+- Reads local files and returns per-page text for downstream processing.
+- Entrypoint: `app.ingestion.loader.load_from_path(file_id, path, mime)`.
+- PDFs use `UnstructuredPDFLoader(mode="elements")`; TXTs are UTF-8 single-page.

@@ -2,11 +2,17 @@ fastapi
 uvicorn[standard]
 pydantic-settings
 langchain
+langchain-community
 langchain-openai
 langchain-anthropic
 langchain-google-genai
 langchain-deepseek
 langchain-xai
+unstructured
+unstructured[pdf]
+pillow-heif
+pdfminer.six
+pypdf
 supabase
 langgraph
 langgraph-checkpoint-postgres

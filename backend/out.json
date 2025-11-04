@@ -1,0 +1,14 @@
+FILES_STORAGE_DIR=storage/files
+{
+  "scanned": 1,
+  "processed": 0,
+  "skipped": 1,
+  "errors": 0,
+  "details": [
+    {
+      "file_id": "ab286f57-c560-4529-8f9b-6d25dfd79c69",
+      "status": "skipped",
+      "reason": "dry-run"
+    }
+  ]
+}

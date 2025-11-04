@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     OPENROUTER_SITE_URL: Optional[str] = None   # HTTP-Referer
     OPENROUTER_APP_TITLE: Optional[str] = None  # X-Title
 
+    # File storage (TEMP: local dev)
+    FILES_STORAGE_DIR: str = "backend/storage/files"
+
     # Pydantic settings configuration
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),

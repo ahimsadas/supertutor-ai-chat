@@ -12,6 +12,7 @@ from app.api.curricula import get_curriculum
 from app.ingestion.service import ingest_file, IngestionTooLargeError
 from app.core.ingest_limits import ingest_cap_bytes
 from app.clients.supabase_client import get_supabase_client
+from app.core.config import get_settings, BACKEND_DIR
 from uuid import UUID
 
 
@@ -33,6 +34,29 @@ def _infer_mime_from_ext(filename: str) -> str:
     if ext == ".txt":
         return "text/plain"
     return "application/octet-stream"
+
+
+def _ext_for(filename: str, mime: str) -> str:
+    ext = Path(filename or "").suffix.lower()
+    if ext in {".pdf", ".txt"}:
+        return ext
+    m = (mime or "").lower()
+    if m == "application/pdf":
+        return ".pdf"
+    if m == "text/plain":
+        return ".txt"
+    return ext or ".bin"
+
+
+def _storage_dir() -> Path:
+    raw = get_settings().FILES_STORAGE_DIR
+    p = Path(raw)
+    if p.is_absolute():
+        return p.resolve()
+    raw_norm = raw.replace("\\", "/").lstrip("./")
+    if raw_norm.startswith("backend/"):
+        raw_norm = raw_norm[len("backend/"):]
+    return (BACKEND_DIR / raw_norm).resolve()
 
 
 async def _hash_upload_stream(upload: UploadFile, cap_bytes: int) -> Tuple[Optional[str], int, bool]:
@@ -141,6 +165,32 @@ async def ingest_files(
                 mime=mime,
                 sha256=sha_hex or "",
             )
+
+            # TEMP: local disk storage (to remove in prod; replace with Supabase storage upload).
+            file_id = res.get("file_id")
+            deduped = bool(res.get("deduped"))
+            if file_id and not deduped:
+                dest_dir = _storage_dir()
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                ext = _ext_for(name, mime)
+                dest_path = dest_dir / f"{file_id}{ext}"
+                try:
+                    try:
+                        await upload.seek(0)
+                    except Exception:
+                        try:
+                            upload.file.seek(0)  # type: ignore[attr-defined]
+                        except Exception:
+                            pass
+                    with open(dest_path, "wb") as out:
+                        while True:
+                            chunk = upload.file.read(1024 * 1024)  # type: ignore[attr-defined]
+                            if not chunk:
+                                break
+                            out.write(chunk)
+                    logger.info("files.ingest: wrote %s", dest_path)
+                except Exception:
+                    logger.exception("files.ingest: write-failed file_id=%s dest=%s", file_id, dest_path)
         except IngestionTooLargeError:
             rejected.append({"filename": name, "reason": "too-large"})
             logger.debug(

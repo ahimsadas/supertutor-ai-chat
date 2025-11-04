@@ -192,7 +192,8 @@
               "host": ["{{host}}"],
               "port": "{{port}}",
               "path": ["files:ingest"]
-            }
+            },
+            "description": "TEMP (local dev): On non-deduped success, the server writes uploaded bytes to local disk at FILES_STORAGE_DIR as <file_id><ext>. This will be replaced by Supabase storage in production."
           }
         }
       ]

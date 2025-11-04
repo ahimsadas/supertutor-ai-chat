@@ -19,3 +19,7 @@ __pycache__/
 .env
 .env.*
 *.local
+
+# TEMP: local dev uploads (to remove when switching to Supabase storage)
+backend/storage/files/
+backend/samples/

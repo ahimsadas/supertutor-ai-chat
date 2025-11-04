@@ -30,7 +30,8 @@ supertutor-ai-chat/
 │   │   │   ├── __init__.py
 │   │   │   ├── curricula.py
 │   │   │   ├── ingest.py
-│   │   │   └── files.py
+│   │   │   ├── files.py
+│   │   │   └── ingestion_jobs.py
 │   │   ├── checkpointing
 │   │   │   ├── __init__.py
 │   │   │   └── postgres_checkpointer.py
@@ -40,6 +41,10 @@ supertutor-ai-chat/
 │   │   ├── core
 │   │   │   ├── __init__.py
 │   │   │   └── config.py
+│   │   ├── ingestion
+│   │   │   ├── __init__.py
+│   │   │   ├── loader.py
+│   │   │   └── runner.py
 │   │   ├── languages
 │   │   │   ├── __init__.py
 │   │   │   └── registry.py
@@ -84,5 +89,18 @@ supertutor-ai-chat/
 - SQL migration stubs live under `backend/sql/`.
 - For Supabase, execute these manually via Supabase Studio SQL Editor or `psql` against the project database.
 - Vector indexes: HNSW indexes are added via `backend/sql/003_index_hnsw.sql` and can be tuned at query time using the `hnsw.ef_search` setting.
- - RPCs: Application RPCs (e.g., `match_documents`) live under `backend/sql/` and are applied manually via Supabase Studio SQL Editor.
+- RPCs: Application RPCs (e.g., `match_documents`) live under `backend/sql/` and are applied manually via Supabase Studio SQL Editor.
 
+## Ingestion Job Runner
+
+- Purpose: Scan recent files (or a specific file) and run the PDF/TXT loading layer, then hand the pages to the chunker.
+- Storage directory: `FILES_STORAGE_DIR` env var (default `backend/storage/files`). The CLI prints it at startup.
+- If the chunker is not implemented yet, items are marked as `skipped` with reason `chunker-missing` and a warning is logged.
+
+CLI usage:
+
+```bash
+# From backend/
+python -m app.cli.ingestion_jobs run --limit 5 --dry-run
+python -m app.cli.ingestion_jobs run --file-id <uuid>
+python -m app.cli.ingestion_jobs run --curriculum-id <uuid> --limit 20
