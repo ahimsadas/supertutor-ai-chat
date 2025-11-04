@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from app.clients.supabase_client import get_supabase_client
 from app.ingestion.loader import load_from_path
-from app.core.config import BACKEND_DIR
+from app.core.config import BACKEND_DIR, get_settings
 
 
 logger = getLogger("supertutor.ingestion.runner")
@@ -163,19 +163,38 @@ def run_pending_jobs(
                 )
 
             try:
-                try:
-                    from app.ingestion.chunker import chunk_loaded_pages  # type: ignore
-                except Exception:
-                    reason = "chunker-missing"
-                    skipped += 1
-                    logger.warning("chunker not implemented; skipping file_id=%s", file_id)
-                    details.append({"file_id": file_id, "status": "skipped", "reason": reason})
-                    continue
+                from app.ingestion.chunker import chunk_pages
 
-                res = chunk_loaded_pages(loaded)  # type: ignore[name-defined]
-                logger.debug("runner.chunker.return file_id=%s summary=%r", file_id, res)
+                pages_struct = loaded.get("pages_struct") if isinstance(loaded, dict) else None
+                if not isinstance(pages_struct, list):
+                    raise RuntimeError("loaded.pages_struct missing or invalid")
+
+                # Configurable chunk sizes via env (with sane defaults in chunker)
+                s = get_settings()
+                chunk_size = int(getattr(s, "CHUNK_SIZE_CHARS", 500) or 500)
+                chunk_overlap = int(getattr(s, "CHUNK_OVERLAP_CHARS", 60) or 60)
+
+                chunks = chunk_pages(
+                    file_id=file_id,
+                    pages_struct=pages_struct,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                )
+                # TODO: step 16 - generate and persist embeddings for each chunk
+
+                pages_count = int(loaded.get("pages") or len(pages_struct)) if isinstance(loaded, dict) else len(pages_struct)
+                chunk_count = len(chunks)
+                logger.debug(
+                    "runner.chunker.done file_id=%s pages=%d chunks=%d", file_id, pages_count, chunk_count
+                )
                 processed += 1
-                details.append({"file_id": file_id, "status": "processed", "reason": "ok"})
+                details.append({
+                    "file_id": file_id,
+                    "status": "processed",
+                    "reason": "ok",
+                    "pages": pages_count,
+                    "chunks": chunk_count,
+                })
             except Exception as e:
                 reason = (f"chunker-error: {e}")[:200]
                 errors += 1

@@ -8,6 +8,7 @@ langchain-anthropic
 langchain-google-genai
 langchain-deepseek
 langchain-xai
+langchain-text-splitters>=1.0,<2
 unstructured
 unstructured[pdf]
 pillow-heif

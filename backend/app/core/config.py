@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # File storage (TEMP: local dev)
     FILES_STORAGE_DIR: str = "backend/storage/files"
 
+    # Chunking (optional overrides)
+    CHUNK_SIZE_CHARS: int = 500
+    CHUNK_OVERLAP_CHARS: int = 60
+
     # Pydantic settings configuration
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),

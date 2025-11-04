@@ -44,6 +44,7 @@ supertutor-ai-chat/
 │   │   ├── ingestion
 │   │   │   ├── __init__.py
 │   │   │   ├── loader.py
+│   │   │   ├── chunker.py
 │   │   │   └── runner.py
 │   │   ├── languages
 │   │   │   ├── __init__.py
@@ -104,3 +105,11 @@ CLI usage:
 python -m app.cli.ingestion_jobs run --limit 5 --dry-run
 python -m app.cli.ingestion_jobs run --file-id <uuid>
 python -m app.cli.ingestion_jobs run --curriculum-id <uuid> --limit 20
+```
+
+## Chunking
+
+- Per-page splitting using LangChain's `RecursiveCharacterTextSplitter` with overlap (`chunk_size`, `chunk_overlap`) and `add_start_index=True`.
+- Fallback start index: if `start_index` metadata is missing, compute via substring search on the first 80, then 40 characters of the chunk; default to 0 if not found.
+- Output chunk fields for the next step (embeddings): `{file_id, page, start_index, snippet}`.
+- `snippet` is normalized to 350–500 characters when possible and derived from the page text around `start_index`.

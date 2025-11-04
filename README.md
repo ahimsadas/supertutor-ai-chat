@@ -212,6 +212,9 @@ Exit codes:
 - Storage directory is read from env `FILES_STORAGE_DIR` (default `backend/storage/files`). The CLI prints it at startup.
 - If the chunker is not implemented yet, items are marked as `skipped` with reason `chunker-missing` and a warning is logged.
 
+- Chunking produces page-relative chunks for embeddings with fields: `{file_id, page, start_index, snippet}`.
+- Optional env overrides: `CHUNK_SIZE_CHARS` (default 500), `CHUNK_OVERLAP_CHARS` (default 60).
+
 CLI usage:
 
 ```bash
