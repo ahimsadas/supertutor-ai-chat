@@ -1,33 +1,19 @@
 from __future__ import annotations
 
-import os
 import time
 from logging import getLogger
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.clients.supabase_client import get_supabase_client
-from app.ingestion.loader import load_from_path
-from app.core.config import BACKEND_DIR, get_settings
+from app.ingestion.loader import load_from_storage
+from app.core.config import get_settings
 
 
 logger = getLogger("supertutor.ingestion.runner")
 
 
-def _storage_dir() -> Path:
-    raw = os.environ.get("FILES_STORAGE_DIR", "backend/storage/files")
-    p = Path(raw)
-    if p.is_absolute():
-        return p.resolve()
-    raw_norm = raw.replace("\\", "/").lstrip("./")
-    if raw_norm == "backend":
-        raw_norm = ""
-    elif raw_norm.startswith("backend/"):
-        raw_norm = raw_norm[len("backend/"):]
-    return (BACKEND_DIR / raw_norm).resolve()
-
-
 def _infer_mime_from_ext(filename: str) -> str:
+    from pathlib import Path
     suf = Path(filename or "").suffix.lower()
     if suf == ".pdf":
         return "application/pdf"
@@ -36,11 +22,31 @@ def _infer_mime_from_ext(filename: str) -> str:
     return "application/octet-stream"
 
 
-def _resolve_path(file_row: Dict[str, Any]) -> Path:
-    file_id = str(file_row.get("id") or "").strip()
-    filename = str(file_row.get("filename") or "")
-    ext = Path(filename).suffix
-    return _storage_dir() / f"{file_id}{ext}"
+def _ensure_storage_key(row: Dict[str, Any]) -> Optional[str]:
+    key = (row.get("storage_key") or "").strip()
+    if key:
+        # Normalize legacy keys that lack the 'files/' prefix
+        if "/" not in key:
+            return f"files/{key}"
+        return key
+    # Fallback: derive a likely key for Supabase bucket prefix
+    fid = str(row.get("id") or "").strip()
+    fname = str(row.get("filename") or "")
+    ext = ""
+    try:
+        from pathlib import Path
+        ext = Path(fname).suffix
+    except Exception:
+        ext = ""
+    if not ext:
+        m = str(row.get("mime") or "")
+        if m == "application/pdf":
+            ext = ".pdf"
+        elif m == "text/plain":
+            ext = ".txt"
+    if not fid:
+        return None
+    return f"files/{fid}{ext}"
 
 
 def _has_chunks(file_id: str) -> bool:
@@ -77,7 +83,7 @@ def run_pending_jobs(
         r = (
             client
             .table("files")
-            .select("id,curriculum_id,filename,mime,created_at")
+            .select("id,curriculum_id,filename,mime,storage_key,created_at")
             .eq("id", only_file_id)
             .limit(1)
             .execute()
@@ -97,7 +103,7 @@ def run_pending_jobs(
                 "details": details,
             }
     else:
-        q = client.table("files").select("id,curriculum_id,filename,mime,created_at")
+        q = client.table("files").select("id,curriculum_id,filename,mime,storage_key,created_at")
         if curriculum_id:
             q = q.eq("curriculum_id", curriculum_id)
         q = q.order("created_at", desc=True).limit(limit)
@@ -114,12 +120,12 @@ def run_pending_jobs(
         scanned += 1
 
         try:
-            path = _resolve_path(row)
             mime = row.get("mime") or _infer_mime_from_ext(str(row.get("filename") or ""))
-            logger.debug("runner.candidate file_id=%s path=%s mime=%s", file_id, path, mime)
+            storage_key = _ensure_storage_key(row)
+            logger.debug("runner.candidate file_id=%s key=%s mime=%s", file_id, storage_key, mime)
 
-            if not path.exists():
-                reason = f"file-missing:{path}"
+            if not storage_key:
+                reason = "missing-storage-key"
                 errors += 1
                 details.append({"file_id": file_id, "status": "error", "reason": reason})
                 continue
@@ -146,7 +152,7 @@ def run_pending_jobs(
             t0 = time.perf_counter()
             loaded: Optional[Dict[str, Any]] = None
             try:
-                loaded = load_from_path(file_id=file_id, path=str(path), mime=str(mime))
+                loaded = load_from_storage(file_id=file_id, storage_key=str(storage_key), mime=str(mime))
             except Exception as e:
                 reason = (f"load-error: {e}")[:200]
                 errors += 1

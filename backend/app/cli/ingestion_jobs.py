@@ -1,4 +1,3 @@
-import os
 import sys
 import json
 import logging
@@ -50,9 +49,6 @@ def run(
     if limit <= 0:
         logger.error("--limit must be > 0")
         raise typer.Exit(1)
-
-    storage_dir = os.environ.get("FILES_STORAGE_DIR", "backend/storage/files")
-    logger.info("FILES_STORAGE_DIR=%s", storage_dir)
 
     try:
         summary = run_pending_jobs(

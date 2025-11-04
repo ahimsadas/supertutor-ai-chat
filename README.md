@@ -209,7 +209,7 @@ Exit codes:
 ### Ingestion Job Runner
 
 - Scans recent files (or a specific file) and runs the PDF/TXT loading layer, then hands pages to the chunker.
-- Storage directory is read from env `FILES_STORAGE_DIR` (default `backend/storage/files`). The CLI prints it at startup.
+- Blobs are fetched from Supabase Storage using the file's `storage_key`; no local filesystem storage is used.
 - If the chunker is not implemented yet, items are marked as `skipped` with reason `chunker-missing` and a warning is logged.
 
 - Chunking produces page-relative chunks for embeddings with fields: `{file_id, page, start_index, snippet}`.
@@ -236,6 +236,19 @@ Exit codes:
 
 ### Loading Layer
 
-- Reads local files and returns per-page text for downstream processing.
-- Entrypoint: `app.ingestion.loader.load_from_path(file_id, path, mime)`.
+- Reads file blobs from Supabase Storage and returns per-page text for downstream processing.
+- Entrypoint: `app.ingestion.loader.load_from_storage(file_id, storage_key, mime)`.
 - PDFs use `UnstructuredPDFLoader(mode="elements")`; TXTs are UTF-8 single-page.
+
+### Supabase Storage
+
+- Bucket is picked from env `SUPABASE_FILES_BUCKET` (default `files`).
+- On first use, the backend ensures the bucket exists. With a service role key it will attempt to auto-create a private bucket if missing; otherwise it raises a clear error instructing you to create the bucket or set the env.
+- Object keys are stored as `files/{uuid}{ext}`.
+
+### Files storage metadata (DB)
+
+- Columns on `public.files`: `storage_key` (text), `size_bytes` (bigint), `storage_backend` (text).
+- `storage_key` is the logical key `{uuid}{ext}` with a `files/` prefix in Supabase (e.g., `files/{uuid}.pdf`).
+- Legacy rows are backfilled with `storage_key = id || ext` (ext from mime/filename, `.pdf`/`.txt` else empty), `size_bytes = 0`, `storage_backend = 'local'`.
+ - The upload router writes to Supabase Storage and `DELETE /files/{id}` removes the blob via the same adapter.

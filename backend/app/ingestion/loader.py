@@ -3,6 +3,10 @@ from __future__ import annotations
 from typing import List, TypedDict
 from logging import getLogger
 from pathlib import Path
+import os
+from tempfile import NamedTemporaryFile
+
+from app.storage.factory import get_storage
 
 
 logger = getLogger("supertutor.loader")
@@ -136,3 +140,27 @@ def load_from_path(file_id: str, path: str, mime: str) -> LoadedResult:
     )
 
     return result
+
+
+def load_from_storage(file_id: str, storage_key: str, mime: str) -> LoadedResult:
+    logger.debug("loader.storage.start file_id=%s key=%s mime=%s", file_id, storage_key, mime)
+    storage = get_storage()
+    data = storage.get(storage_key)
+    suf = Path(storage_key or "").suffix
+    if not suf:
+        m = (mime or "").strip().lower()
+        if m == "application/pdf":
+            suf = ".pdf"
+        elif m == "text/plain":
+            suf = ".txt"
+    with NamedTemporaryFile(delete=False, suffix=suf) as tmp:
+        tmp.write(data)
+        tmp.flush()
+        tmp_path = tmp.name
+    try:
+        return load_from_path(file_id=file_id, path=tmp_path, mime=mime)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass

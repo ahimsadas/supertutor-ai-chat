@@ -95,7 +95,7 @@ supertutor-ai-chat/
 ## Ingestion Job Runner
 
 - Purpose: Scan recent files (or a specific file) and run the PDF/TXT loading layer, then hand the pages to the chunker.
-- Storage directory: `FILES_STORAGE_DIR` env var (default `backend/storage/files`). The CLI prints it at startup.
+- Source documents are fetched from Supabase Storage via each file's `storage_key`; no local filesystem paths are used.
 - If the chunker is not implemented yet, items are marked as `skipped` with reason `chunker-missing` and a warning is logged.
 
 CLI usage:
@@ -113,3 +113,22 @@ python -m app.cli.ingestion_jobs run --curriculum-id <uuid> --limit 20
 - Fallback start index: if `start_index` metadata is missing, compute via substring search on the first 80, then 40 characters of the chunk; default to 0 if not found.
 - Output chunk fields for the next step (embeddings): `{file_id, page, start_index, snippet}`.
 - `snippet` is normalized to 350–500 characters when possible and derived from the page text around `start_index`.
+
+## Storage layer
+
+- A `StorageBackend` abstraction provides `put/get/delete/size` for binary objects.
+- Single backend: Supabase Storage bucket `SUPABASE_FILES_BUCKET` (default `files`).
+- Logical key convention: `files/{uuid}{ext}`. The upload router writes to Supabase; `DELETE /files/{id}` removes the blob.
+ - Bucket resolution comes from settings (`SUPABASE_FILES_BUCKET`). On first use, the backend ensures the bucket exists. With a service role key, it will attempt to auto-create a private bucket if missing; otherwise it raises a clear error to create the bucket or set the env.
+
+## Files storage metadata (DB)
+
+- New columns on `public.files`:
+  - `storage_key text` — logical key, by design `{uuid}{ext}`; adapters may apply prefixes/paths internally.
+  - `size_bytes bigint` — object size in bytes.
+  - `storage_backend text` — which backend wrote the object (historical; now `supabase`).
+- Backfill for legacy rows initializes:
+  - `storage_key = id::text || ext` where `ext` is derived from `mime`/`filename` (`.pdf`/`.txt` or empty).
+  - `size_bytes = 0`.
+  - `storage_backend = 'local'`.
+- Constraint: `size_bytes` must be NULL or >= 0.

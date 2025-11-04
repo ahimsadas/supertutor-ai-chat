@@ -4,6 +4,7 @@ import hashlib
 from typing import List, Optional, Tuple
 from logging import getLogger
 from pathlib import Path
+import uuid
 
 from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import JSONResponse
@@ -12,7 +13,7 @@ from app.api.curricula import get_curriculum
 from app.ingestion.service import ingest_file, IngestionTooLargeError
 from app.core.ingest_limits import ingest_cap_bytes
 from app.clients.supabase_client import get_supabase_client
-from app.core.config import get_settings, BACKEND_DIR
+from app.storage.factory import get_storage
 from uuid import UUID
 
 
@@ -46,17 +47,6 @@ def _ext_for(filename: str, mime: str) -> str:
     if m == "text/plain":
         return ".txt"
     return ext or ".bin"
-
-
-def _storage_dir() -> Path:
-    raw = get_settings().FILES_STORAGE_DIR
-    p = Path(raw)
-    if p.is_absolute():
-        return p.resolve()
-    raw_norm = raw.replace("\\", "/").lstrip("./")
-    if raw_norm.startswith("backend/"):
-        raw_norm = raw_norm[len("backend/"):]
-    return (BACKEND_DIR / raw_norm).resolve()
 
 
 async def _hash_upload_stream(upload: UploadFile, cap_bytes: int) -> Tuple[Optional[str], int, bool]:
@@ -166,14 +156,9 @@ async def ingest_files(
                 sha256=sha_hex or "",
             )
 
-            # TEMP: local disk storage (to remove in prod; replace with Supabase storage upload).
             file_id = res.get("file_id")
             deduped = bool(res.get("deduped"))
             if file_id and not deduped:
-                dest_dir = _storage_dir()
-                dest_dir.mkdir(parents=True, exist_ok=True)
-                ext = _ext_for(name, mime)
-                dest_path = dest_dir / f"{file_id}{ext}"
                 try:
                     try:
                         await upload.seek(0)
@@ -182,15 +167,36 @@ async def ingest_files(
                             upload.file.seek(0)  # type: ignore[attr-defined]
                         except Exception:
                             pass
-                    with open(dest_path, "wb") as out:
-                        while True:
-                            chunk = upload.file.read(1024 * 1024)  # type: ignore[attr-defined]
-                            if not chunk:
-                                break
-                            out.write(chunk)
-                    logger.info("files.ingest: wrote %s", dest_path)
+                    storage = get_storage()
+                    ext = _ext_for(name, mime)
+                    storage_key = storage.put(uuid.UUID(str(file_id)), upload.file, ext)
+                    size_bytes = int(size)
+                    storage_backend = "supabase"
+
+                    client = get_supabase_client()
+                    try:
+                        (
+                            client
+                            .table("files")
+                            .update({
+                                "storage_key": storage_key,
+                                "size_bytes": size_bytes,
+                                "storage_backend": storage_backend,
+                            })
+                            .eq("id", str(file_id))
+                            .execute()
+                        )
+                        logger.info(
+                            "files.ingest: storage backend=%s file_id=%s key=%s size=%d",
+                            storage_backend,
+                            file_id,
+                            storage_key,
+                            size_bytes,
+                        )
+                    except Exception:
+                        logger.exception("files.ingest: metadata update failed file_id=%s key=%s", file_id, storage_key)
                 except Exception:
-                    logger.exception("files.ingest: write-failed file_id=%s dest=%s", file_id, dest_path)
+                    logger.exception("files.ingest: storage put failed file_id=%s", file_id)
         except IngestionTooLargeError:
             rejected.append({"filename": name, "reason": "too-large"})
             logger.debug(
@@ -299,6 +305,33 @@ def delete_file(file_id: UUID):
     except Exception:
         logger.exception("files.delete: count chunks failed id=%s", fid)
         return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+
+    # Read storage metadata then attempt storage delete (idempotent)
+    storage_key: Optional[str] = None
+    try:
+        meta_resp = (
+            client
+            .table("files")
+            .select("storage_key,storage_backend")
+            .eq("id", fid)
+            .limit(1)
+            .execute()
+        )
+        meta_rows = meta_resp.data or []
+        if meta_rows:
+            storage_key = meta_rows[0].get("storage_key")
+    except Exception:
+        logger.debug("files.delete: unable to read storage metadata id=%s", fid)
+
+    if storage_key:
+        try:
+            storage = get_storage()
+            storage.delete(storage_key)
+            logger.info("files.delete: storage deleted key=%s", storage_key)
+        except FileNotFoundError:
+            logger.debug("files.delete: storage key missing key=%s", storage_key)
+        except Exception:
+            logger.exception("files.delete: storage delete failed key=%s", storage_key)
 
     # Delete file row (FK cascade removes chunks)
     try:

@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
     SUPABASE_DB_URL: Optional[str] = None  # optional: direct DB access later
+    SUPABASE_FILES_BUCKET: str = "files"
 
     # Provider API Keys (optional for now; used when a provider is selected)
     OPENAI_API_KEY: Optional[str] = None
@@ -36,9 +37,6 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_SITE_URL: Optional[str] = None   # HTTP-Referer
     OPENROUTER_APP_TITLE: Optional[str] = None  # X-Title
-
-    # File storage (TEMP: local dev)
-    FILES_STORAGE_DIR: str = "backend/storage/files"
 
     # Chunking (optional overrides)
     CHUNK_SIZE_CHARS: int = 500

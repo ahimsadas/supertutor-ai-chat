@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "SuperTutor Backend (Local)",
-    "description": "Postman collection for SuperTutor backend. Paste this JSON into Postman (Import > Raw Text). Uses {{scheme}}://{{host}}:{{port}} for server URL.\n\nCLI parity: you can upload files via the admin CLI: python -m app.cli.ingest upload --curriculum-id <UUID> <file1> <file2> ...\nFiles CLI: list/delete mirror these endpoints, e.g., python -m app.cli.files list --curriculum-id <UUID> and python -m app.cli.files delete --id <UUID>",
+    "description": "Postman collection for SuperTutor backend. Paste this JSON into Postman (Import > Raw Text). Uses {{scheme}}://{{host}}:{{port}} for server URL.\n\nCLI parity: you can upload files via the admin CLI: python -m app.cli.ingest upload --curriculum-id <UUID> <file1> <file2> ...\nFiles CLI: list/delete mirror these endpoints, e.g., python -m app.cli.files list --curriculum-id <UUID> and python -m app.cli.files delete --id <UUID>.\n\nStorage: bucket comes from env SUPABASE_FILES_BUCKET (default 'files'). On first use the backend ensures the bucket exists (attempts auto-create with service role key); otherwise it will instruct you to create it.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -193,7 +193,7 @@
               "port": "{{port}}",
               "path": ["files:ingest"]
             },
-            "description": "TEMP (local dev): On non-deduped success, the server writes uploaded bytes to local disk at FILES_STORAGE_DIR as <file_id><ext>. This will be replaced by Supabase storage in production."
+            "description": "On non-deduped success, the server writes uploaded bytes to Supabase Storage and persists storage metadata on the file record."
           }
         }
       ]

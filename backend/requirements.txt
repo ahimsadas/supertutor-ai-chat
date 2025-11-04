@@ -18,7 +18,8 @@ supabase
 langgraph
 langgraph-checkpoint-postgres
 psycopg[binary]
-# (Optionally later: python-dotenv)
+# psycopg2
+python-dotenv
 typer
 requests
 python-multipart
