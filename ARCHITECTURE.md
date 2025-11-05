@@ -1,16 +1,15 @@
-# Architecture Overview (Initial)
+# Architecture Overview
 
 This repository is a minimal monorepo scaffold. It will evolve as the design matures.
 
 ## Current Structure
-- `backend/` — placeholder for the Python backend service
+- `backend/` — FastAPI backend with Supabase (pgvector), ingestion pipeline, and admin CLIs
 - `frontend/` — placeholder for the React frontend application
 - Root files:
-  - `README.md` — project overview and layout
-  - `ARCHITECTURE.md` — architecture outline (this document)
+  - `README.md` — project overview and setup
+  - `ARCHITECTURE.md` — architecture and project tree (this document)
+  - `postman_collection.json` — REST API collection for local testing
   - `.gitignore` — repository ignore rules
-
-Note: This document will be updated as we implement components and refine the architecture.
 
 ## Full Project Structure
 
@@ -25,12 +24,13 @@ supertutor-ai-chat/
 │   │   │   ├── providers.py
 │   │   │   ├── responses.py
 │   │   │   ├── schemas.py
-│   │   │   └── curricula.py
+│   │   │   ├── curricula.py
+│   │   │   └── files.py
 │   │   ├── cli
 │   │   │   ├── __init__.py
 │   │   │   ├── curricula.py
-│   │   │   ├── ingest.py
 │   │   │   ├── files.py
+│   │   │   ├── ingest.py
 │   │   │   └── ingestion_jobs.py
 │   │   ├── checkpointing
 │   │   │   ├── __init__.py
@@ -45,7 +45,10 @@ supertutor-ai-chat/
 │   │   │   ├── __init__.py
 │   │   │   ├── loader.py
 │   │   │   ├── chunker.py
-│   │   │   └── runner.py
+│   │   │   ├── embedder.py
+│   │   │   ├── persist.py
+│   │   │   ├── runner.py
+│   │   │   └── service.py
 │   │   ├── languages
 │   │   │   ├── __init__.py
 │   │   │   └── registry.py
@@ -53,22 +56,23 @@ supertutor-ai-chat/
 │   │   │   ├── __init__.py
 │   │   │   ├── provider_factory.py
 │   │   │   └── registry.py
+│   │   ├── storage
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py
+│   │   │   ├── factory.py
+│   │   │   └── supabase.py
 │   │   ├── __init__.py
 │   │   └── main.py
-│   ├── config
-│   ├── routers
-│   ├── services
 │   ├── sql
 │   │   ├── 001_enable_pgvector.sql
 │   │   ├── 002_schema_core.sql
 │   │   ├── 003_index_hnsw.sql
 │   │   ├── 004_rpc_match_documents.sql
-│   │   └── 005_files_chunks_constraints.sql
-│   ├── tests
-│   ├── .env
+│   │   ├── 005_files_chunks_constraints.sql
+│   │   └── 006_files_storage_metadata.sql
+│   ├── requirements.txt
 │   ├── .env.example
-│   ├── .gitkeep
-│   └── requirements.txt
+│   └── .env
 ├── frontend
 │   └── .gitkeep
 ├── .gitignore
@@ -94,9 +98,10 @@ supertutor-ai-chat/
 
 ## Ingestion Job Runner
 
-- Purpose: Scan recent files (or a specific file) and run the PDF/TXT loading layer, then hand the pages to the chunker.
+- Purpose: Scan recent files (or a specific file) and run the pipeline end-to-end: load (PDF/TXT) → chunk → embed → persist.
 - Source documents are fetched from Supabase Storage via each file's `storage_key`; no local filesystem paths are used.
-- If the chunker is not implemented yet, items are marked as `skipped` with reason `chunker-missing` and a warning is logged.
+- Idempotency: if any rows already exist in `public.chunks` for a file, the runner skips re-inserting.
+- The runner updates `files.pages` if the value is NULL (from loader page count).
 
 CLI usage:
 
@@ -113,6 +118,13 @@ python -m app.cli.ingestion_jobs run --curriculum-id <uuid> --limit 20
 - Fallback start index: if `start_index` metadata is missing, compute via substring search on the first 80, then 40 characters of the chunk; default to 0 if not found.
 - Output chunk fields for the next step (embeddings): `{file_id, page, start_index, snippet}`.
 - `snippet` is normalized to 350–500 characters when possible and derived from the page text around `start_index`.
+
+## Embeddings & Persistence
+
+- Embeddings model: OpenAI `text-embedding-3-small` (1536-d). Requires `OPENAI_API_KEY`.
+- Batching: 64 snippets per request by default; preserves order.
+- Inserts into `public.chunks` with fields `{file_id, page, start_index, snippet, embedding}` where `embedding` is `vector(1536)`.
+- Logging includes a concise embedder summary per file and an overall runner summary with inserted counts.
 
 ## Storage layer
 

@@ -1,17 +1,16 @@
 {
   "info": {
     "name": "SuperTutor Backend (Local)",
-    "description": "Postman collection for SuperTutor backend. Paste this JSON into Postman (Import > Raw Text). Uses {{scheme}}://{{host}}:{{port}} for server URL.\n\nCLI parity: you can upload files via the admin CLI: python -m app.cli.ingest upload --curriculum-id <UUID> <file1> <file2> ...\nFiles CLI: list/delete mirror these endpoints, e.g., python -m app.cli.files list --curriculum-id <UUID> and python -m app.cli.files delete --id <UUID>.\n\nStorage: bucket comes from env SUPABASE_FILES_BUCKET (default 'files'). On first use the backend ensures the bucket exists (attempts auto-create with service role key); otherwise it will instruct you to create it.",
+    "description": "Postman collection for SuperTutor backend. Paste this JSON into Postman (Import > Raw Text). Uses {{baseUrl}} for server URL.\n\nCLI parity: you can upload files via the admin CLI: python -m app.cli.ingest upload --curriculum-id <UUID> <file1> <file2> ...\nFiles CLI: list/delete mirror these endpoints, e.g., python -m app.cli.files list --curriculum-id <UUID> and python -m app.cli.files delete --id <UUID>.\n\nStorage: bucket comes from env SUPABASE_FILES_BUCKET (default 'files'). On first use the backend ensures the bucket exists (attempts auto-create with service role key); otherwise it will instruct you to create it.\nEmbeddings: ingestion runner uses OpenAI text-embedding-3-small and requires OPENAI_API_KEY.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "scheme", "value": "http" },
-    { "key": "host", "value": "localhost" },
-    { "key": "port", "value": "8000" },
+    { "key": "baseUrl", "value": "http://localhost:8000" },
     { "key": "provider", "value": "google" },
     { "key": "model", "value": "gemini-2.0-flash" },
-    { "key": "label", "value": "Google(gemini-2.0-flash)" },
-    { "key": "curriculum_id", "value": "" }
+    { "key": "label", "value": "Google (gemini-2.0-flash)" },
+    { "key": "curriculum_id", "value": "" },
+    { "key": "file_id", "value": "" }
   ],
   "item": [
     {
@@ -24,13 +23,7 @@
             "header": [
               { "key": "Accept", "value": "application/json" }
             ],
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/providers",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["providers"]
-            }
+            "url": "{{baseUrl}}/providers"
           }
         }
       ]
@@ -45,13 +38,7 @@
             "header": [
               { "key": "Accept", "value": "application/json" }
             ],
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/languages",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["languages"]
-            }
+            "url": "{{baseUrl}}/languages"
           }
         }
       ]
@@ -66,13 +53,7 @@
             "header": [
               { "key": "Accept", "value": "application/json" }
             ],
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/curricula",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["curricula"]
-            }
+            "url": "{{baseUrl}}/curricula"
           }
         },
         {
@@ -87,13 +68,7 @@
               "mode": "raw",
               "raw": "{\n  \"name\": \"Sample Curriculum\"\n}"
             },
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/curricula",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["curricula"]
-            }
+            "url": "{{baseUrl}}/curricula"
           }
         },
         {
@@ -103,13 +78,7 @@
             "header": [
               { "key": "Accept", "value": "application/json" }
             ],
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/curricula/{{curriculum_id}}",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["curricula", "{{curriculum_id}}"]
-            }
+            "url": "{{baseUrl}}/curricula/{{curriculum_id}}"
           },
           "response": []
         },
@@ -120,16 +89,7 @@
             "header": [
               { "key": "Accept", "value": "application/json" }
             ],
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/curricula/{{curriculum_id}}?force=true",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["curricula", "{{curriculum_id}}"],
-              "query": [
-                { "key": "force", "value": "true" }
-              ]
-            }
+            "url": "{{baseUrl}}/curricula/{{curriculum_id}}?force=true"
           }
         }
       ]
@@ -151,13 +111,7 @@
                 { "key": "files", "type": "file", "src": [] }
               ]
             },
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/files:ingest",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["files:ingest"]
-            },
+            "url": "{{baseUrl}}/files:ingest",
             "description": "On non-deduped success, the server writes uploaded bytes to Supabase Storage and persists storage metadata on the file record."
           }
         },
@@ -168,16 +122,7 @@
             "header": [
               { "key": "Accept", "value": "application/json" }
             ],
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/files?curriculum_id={{curriculum_id}}",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["files"],
-              "query": [
-                { "key": "curriculum_id", "value": "{{curriculum_id}}" }
-              ]
-            }
+            "url": "{{baseUrl}}/files?curriculum_id={{curriculum_id}}"
           }
         },
         {
@@ -187,13 +132,7 @@
             "header": [
               { "key": "Accept", "value": "application/json" }
             ],
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/files/{{file_id}}",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["files", "{{file_id}}"]
-            }
+            "url": "{{baseUrl}}/files/{{file_id}}"
           }
         }
       ]
@@ -208,13 +147,7 @@
             "header": [
               { "key": "Accept", "value": "application/json" }
             ],
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/healthz",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["healthz"]
-            }
+            "url": "{{baseUrl}}/healthz"
           }
         }
       ]
@@ -229,13 +162,7 @@
             "header": [
               { "key": "Accept", "value": "application/json" }
             ],
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/debug/env",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["debug", "env"]
-            }
+            "url": "{{baseUrl}}/debug/env"
           }
         },
         {
@@ -245,13 +172,7 @@
             "header": [
               { "key": "Accept", "value": "application/json" }
             ],
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/debug/checkpointer",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["debug", "checkpointer"]
-            }
+            "url": "{{baseUrl}}/debug/checkpointer"
           }
         },
         {
@@ -261,17 +182,7 @@
             "header": [
               { "key": "Accept", "value": "application/json" }
             ],
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/debug/provider?provider={{provider}}&model={{model}}",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["debug", "provider"],
-              "query": [
-                { "key": "provider", "value": "{{provider}}" },
-                { "key": "model", "value": "{{model}}" }
-              ]
-            },
+            "url": "{{baseUrl}}/debug/provider?provider={{provider}}&model={{model}}",
             "description": "Validate provider factory with separate provider and model query params."
           }
         },
@@ -282,16 +193,7 @@
             "header": [
               { "key": "Accept", "value": "application/json" }
             ],
-            "url": {
-              "raw": "{{scheme}}://{{host}}:{{port}}/debug/provider?label={{label}}",
-              "protocol": "{{scheme}}",
-              "host": ["{{host}}"],
-              "port": "{{port}}",
-              "path": ["debug", "provider"],
-              "query": [
-                { "key": "label", "value": "{{label}}" }
-              ]
-            },
+            "url": "{{baseUrl}}/debug/provider?label={{label}}",
             "description": "Validate provider factory using a combined label like 'OpenAI (gpt-4o-mini)'."
           }
         }

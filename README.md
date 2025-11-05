@@ -124,15 +124,15 @@ Student-facing frontend and an admin CLI for data ingestion. No authentication y
   curl -s http://localhost:8000/healthz
   # {"ok": true, "service": "supertutor-backend"}
   ```
-- Notes:
-  - Provider API keys (OpenAI/Anthropic/Google/DeepSeek/xAI) are optional for now and will be used in later steps.
+ - Notes:
+  - OpenAI API key is required when running the ingestion job runner to generate embeddings (model `text-embedding-3-small`). Set `OPENAI_API_KEY` in `backend/.env`. Other provider keys (Anthropic/Google/DeepSeek/xAI) remain optional for later steps.
   - Supabase server-only variables `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required only when you actually request a Supabase client in code.
 
 ### Languages (registry-based)
 
 - The available languages are defined in code at `backend/app/languages/registry.py`.
 - The API `GET /languages` returns this static, read-only list (enabled entries only), ordered by `sort_order` then `name`.
-- No database seeding or CRUD exists for languages; the former `public.languages` table has been removed by migration `007_drop_languages_table.sql`.
+- No database seeding or CRUD exists for languages; there is no `public.languages` table.
 
 ### Admin CLI: Curricula
 
@@ -152,6 +152,8 @@ python -m app.cli.curricula create --name "JEE Physics"
 # Delete a curriculum by id
 python -m app.cli.curricula delete --id <uuid>
 ```
+
+The JSON summary includes an `inserted` total row count across processed files.
 
 Exit codes:
 
@@ -208,11 +210,12 @@ Exit codes:
 
 ### Ingestion Job Runner
 
-- Scans recent files (or a specific file) and runs the PDF/TXT loading layer, then hands pages to the chunker.
+- Scans recent files (or a specific file) and runs the pipeline: load (PDF/TXT) → chunk → embed → persist.
 - Blobs are fetched from Supabase Storage using the file's `storage_key`; no local filesystem storage is used.
-- If the chunker is not implemented yet, items are marked as `skipped` with reason `chunker-missing` and a warning is logged.
-
 - Chunking produces page-relative chunks for embeddings with fields: `{file_id, page, start_index, snippet}`.
+- Embeddings: batches snippets with OpenAI `text-embedding-3-small` (1536-d). Default batch size: 64. Requires `OPENAI_API_KEY`.
+- Persistence: inserts rows into `public.chunks` with `embedding vector(1536)`; updates `files.pages` if the DB value is `NULL`.
+- Idempotent: if any rows already exist in `public.chunks` for a file, the runner skips re-inserting.
 - Optional env overrides: `CHUNK_SIZE_CHARS` (default 500), `CHUNK_OVERLAP_CHARS` (default 60).
 
 CLI usage:
@@ -228,11 +231,24 @@ python -m app.cli.ingestion_jobs run --file-id <uuid>
 python -m app.cli.ingestion_jobs run --curriculum-id <uuid> --limit 20
 ```
 
+Verification:
+
+```sql
+-- Verify rows were inserted for a specific file
+select count(*) from public.chunks where file_id = '<uuid>';
+
+-- Spot-check a few persisted snippets and vector dims
+select file_id, page, start_index, left(snippet, 80) as snippet_preview,
+       cardinality(embedding) as dim
+from public.chunks
+where file_id = '<uuid>'
+limit 5;
+```
+
 Exit codes:
 
 - 0: success and no errors in summary
-- 2: one or more items had `errors > 0`
-- 1: invalid inputs or runner-level error
+- 1: invalid inputs, runner-level error, or one/more items had `errors > 0`
 
 ### Loading Layer
 

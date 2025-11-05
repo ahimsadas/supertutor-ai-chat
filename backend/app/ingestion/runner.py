@@ -75,6 +75,7 @@ def run_pending_jobs(
     processed = 0
     skipped = 0
     errors = 0
+    inserted_total = 0
     details: List[Dict[str, Any]] = []
 
     candidates: List[Dict[str, Any]] = []
@@ -170,7 +171,8 @@ def run_pending_jobs(
 
             try:
                 from app.ingestion.chunker import chunk_pages
-
+                from app.ingestion.embedder import embed_snippets
+                from app.ingestion.persist import persist_chunks
                 pages_struct = loaded.get("pages_struct") if isinstance(loaded, dict) else None
                 if not isinstance(pages_struct, list):
                     raise RuntimeError("loaded.pages_struct missing or invalid")
@@ -186,13 +188,73 @@ def run_pending_jobs(
                     chunk_size=chunk_size,
                     chunk_overlap=chunk_overlap,
                 )
-                # TODO: step 16 - generate and persist embeddings for each chunk
 
+                # Determine page and chunk counts
                 pages_count = int(loaded.get("pages") or len(pages_struct)) if isinstance(loaded, dict) else len(pages_struct)
                 chunk_count = len(chunks)
-                logger.debug(
-                    "runner.chunker.done file_id=%s pages=%d chunks=%d", file_id, pages_count, chunk_count
+
+                # Short-circuit when no chunks were produced
+                if chunk_count == 0:
+                    # Update files.pages if null only
+                    try:
+                        r_curr = (
+                            client
+                            .table("files")
+                            .select("pages")
+                            .eq("id", file_id)
+                            .limit(1)
+                            .execute()
+                        )
+                        rows_curr = r_curr.data or []
+                        if rows_curr and rows_curr[0].get("pages") is None:
+                            client.table("files").update({"pages": pages_count}).eq("id", file_id).execute()
+                    except Exception:
+                        logger.debug("runner.pages.update.skip file_id=%s", file_id)
+
+                    processed += 1
+                    details.append({
+                        "file_id": file_id,
+                        "status": "processed",
+                        "reason": "no-chunks",
+                        "pages": pages_count,
+                        "chunks": chunk_count,
+                        "inserted": 0,
+                    })
+                    continue
+
+                # Generate embeddings and persist
+                snippets = [str(c.get("snippet", "") or " ") for c in chunks]
+                t_emb0 = time.perf_counter()
+                embeddings = embed_snippets(snippets, batch_size=64)
+                t_emb1 = time.perf_counter()
+                inserted = persist_chunks(client, file_id, chunks, embeddings)
+                inserted_total += int(inserted or 0)
+
+                # Update files.pages if null only
+                try:
+                    r_curr = (
+                        client
+                        .table("files")
+                        .select("pages")
+                        .eq("id", file_id)
+                        .limit(1)
+                        .execute()
+                    )
+                    rows_curr = r_curr.data or []
+                    if rows_curr and rows_curr[0].get("pages") is None:
+                        client.table("files").update({"pages": pages_count}).eq("id", file_id).execute()
+                except Exception:
+                    logger.debug("runner.pages.update.skip file_id=%s", file_id)
+
+                logger.info(
+                    "embedder.summary file_id=%s snippets=%d inserted=%d dim=%d secs=%.3f",
+                    file_id,
+                    len(snippets),
+                    inserted,
+                    1536,
+                    (t_emb1 - t_emb0),
                 )
+
                 processed += 1
                 details.append({
                     "file_id": file_id,
@@ -200,6 +262,7 @@ def run_pending_jobs(
                     "reason": "ok",
                     "pages": pages_count,
                     "chunks": chunk_count,
+                    "inserted": inserted,
                 })
             except Exception as e:
                 reason = (f"chunker-error: {e}")[:200]
@@ -211,8 +274,8 @@ def run_pending_jobs(
             details.append({"file_id": file_id, "status": "error", "reason": reason})
 
     logger.info(
-        "runner.summary scanned=%d processed=%d skipped=%d errors=%d",
-        scanned, processed, skipped, errors,
+        "runner.summary scanned=%d processed=%d skipped=%d errors=%d inserted=%d",
+        scanned, processed, skipped, errors, inserted_total,
     )
 
     return {
@@ -220,5 +283,6 @@ def run_pending_jobs(
         "processed": processed,
         "skipped": skipped,
         "errors": errors,
+        "inserted": inserted_total,
         "details": details,
     }
