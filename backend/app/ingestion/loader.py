@@ -26,6 +26,9 @@ class LoadedResult(TypedDict):
     pages: int
     pages_text: List[str]
     pages_struct: List[LoadedPage]
+    text_chars_total: int
+    pages_with_text: int
+    ocr_suspected: bool
 
 
 def _is_pdf(path: str, mime: str) -> bool:
@@ -117,6 +120,11 @@ def load_from_path(file_id: str, path: str, mime: str) -> LoadedResult:
         {"page": i + 1, "text": pages_text[i]} for i in range(len(pages_text))
     ]
 
+    total_len = sum(len(t) for t in pages_text)
+    pages_with_text = sum(1 for t in pages_text if (t or "").strip())
+    is_pdf = _is_pdf(p, mime)
+    ocr_suspected = bool(is_pdf and (total_len == 0 or (total_len / max(1, len(pages_text))) < 50))
+
     result: LoadedResult = {
         "file_id": file_id,
         "mime": mime,
@@ -126,10 +134,12 @@ def load_from_path(file_id: str, path: str, mime: str) -> LoadedResult:
         "pages": len(pages_text),
         "pages_text": pages_text,
         "pages_struct": pages_struct,
+        "text_chars_total": int(total_len),
+        "pages_with_text": int(pages_with_text),
+        "ocr_suspected": ocr_suspected,
     }
 
     lens_first5 = [len(t) for t in pages_text[:5]]
-    total_len = sum(len(t) for t in pages_text)
     logger.debug(
         "loader.done file_id=%s pages=%d needs_ocr=%s lengths_first5=%s total_len=%d",
         file_id,
@@ -137,6 +147,14 @@ def load_from_path(file_id: str, path: str, mime: str) -> LoadedResult:
         result["needs_ocr"],
         lens_first5,
         total_len,
+    )
+    logger.info(
+        "loader.summary file_id=%s pages=%d text_chars_total=%d pages_with_text=%d ocr_suspected=%s",
+        file_id,
+        result["pages"],
+        result["text_chars_total"],
+        result["pages_with_text"],
+        result["ocr_suspected"],
     )
 
     return result

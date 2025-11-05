@@ -112,7 +112,7 @@
               ]
             },
             "url": "{{baseUrl}}/files:ingest",
-            "description": "On non-deduped success, the server writes uploaded bytes to Supabase Storage and persists storage metadata on the file record."
+            "description": "On non-deduped success, the server writes uploaded bytes to Supabase Storage and persists storage metadata on the file record. Global storage dedupe: if any existing file (any curriculum) shares the same sha256 and has a valid storage_key, the server reuses that storage object (no re-upload) and returns clone_from_file_id in the per-file entry. If all accepted files reused storage, ingestion_status will be 'clone-from'; otherwise 'accepted'."
           }
         },
         {

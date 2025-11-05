@@ -4,6 +4,7 @@ import logging
 from typing import Optional, Any
 
 import typer
+from app.core.config import settings_log_summary
 
 from app.ingestion.runner import run_pending_jobs
 
@@ -40,6 +41,10 @@ def run(
     limit: int = typer.Option(10, "--limit", help="Max recent files to scan"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Do not process; just list and validate"),
 ) -> None:
+    try:
+        logger.info("ingestion_jobs.settings %s", settings_log_summary(["FILES_INGEST_MAX_MB"]))
+    except Exception:
+        pass
     if curriculum_id and not _is_uuid(curriculum_id):
         logger.error("Invalid UUID for --curriculum-id: %s", curriculum_id)
         raise typer.Exit(1)

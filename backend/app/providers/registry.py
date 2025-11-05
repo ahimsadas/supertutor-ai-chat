@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from typing import Any, Dict, List, Tuple
 import importlib.util as import_util
 
@@ -82,8 +81,6 @@ def _check_env(env_var: str) -> bool:
         return False
     settings = get_settings()
     val = getattr(settings, env_var, None)
-    if not val:
-        val = os.environ.get(env_var)
     return bool(val)
 
 

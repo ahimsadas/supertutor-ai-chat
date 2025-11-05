@@ -1,17 +1,18 @@
-import os
 import sys
 import json
 from typing import Any
 
 import requests
 import typer
+from app.core.config import get_settings
 
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, help="Admin files CLI")
 
 
 def _base_url() -> str:
-    return os.environ.get("BACKEND_BASE_URL", "http://localhost:8000").rstrip("/")
+    s = get_settings()
+    return (getattr(s, "BACKEND_BASE_URL", "http://localhost:8000") or "http://localhost:8000").rstrip("/")
 
 
 def _print_json(obj: Any) -> None:

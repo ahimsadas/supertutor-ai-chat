@@ -1,4 +1,3 @@
-import os
 import sys
 import json
 import hashlib
@@ -10,13 +9,24 @@ from contextlib import ExitStack
 
 import typer
 import requests
+import logging
+
+from app.core.config import get_settings, settings_log_summary
 
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, help="Admin ingestion CLI")
 
+logging.basicConfig(
+    level=logging.INFO,
+    stream=sys.stderr,
+    format="%(levelname)s: %(message)s",
+)
+logger = logging.getLogger("supertutor.cli.ingest")
+
 
 def _base_url() -> str:
-    return os.environ.get("BACKEND_BASE_URL", "http://localhost:8000").rstrip("/")
+    s = get_settings()
+    return (getattr(s, "BACKEND_BASE_URL", "http://localhost:8000") or "http://localhost:8000").rstrip("/")
 
 
 def _is_allowed_ext(path: Path) -> bool:
@@ -70,14 +80,21 @@ def _mime_type(path: Path) -> str:
     return "application/octet-stream"
 
 
-def _cap_bytes_from_env() -> int:
-    raw = os.environ.get("FILES_INGEST_MAX_MB", "50")
+def _upload_cap_bytes_from_settings() -> int | None:
+    """Return router-aligned upload cap in bytes for optional CLI preflight.
+
+    Mirrors FILES_UPLOAD_MAX_MB semantics: None => no cap.
+    """
+    s = get_settings()
+    up_mb = getattr(s, "FILES_UPLOAD_MAX_MB", None)
+    if up_mb is None:
+        return None
     try:
-        mb = float(raw)
+        mb = float(up_mb)
     except Exception:
-        mb = 50.0
+        return None
     if mb <= 0:
-        mb = 50.0
+        return None
     return int(mb * 1024 * 1024)
 
 
@@ -91,9 +108,13 @@ def upload(
         help="One or more local file paths (.pdf/.txt)"
     ),
 ) -> None:
+    try:
+        logger.info("cli.ingest.settings %s", settings_log_summary(["FILES_UPLOAD_MAX_MB", "FILES_INGEST_MAX_MB"]))
+    except Exception:
+        pass
     if not _is_uuid(curriculum_id):
         _exit(1, f"Invalid UUID: {curriculum_id}")
-    cap_bytes = _cap_bytes_from_env()
+    cap_bytes = _upload_cap_bytes_from_settings()
     # Workaround: drop any stray 'upload' tokens that are not files (some shells/Typer edge-cases)
     files = [p for p in files if not (p.name == "upload" and not p.is_file())]
     to_send: List[Tuple[Path, str, str, str, int]] = []
@@ -116,7 +137,7 @@ def upload(
             sys.stderr.write(f"skip {p.name}: cannot read file: {e}\n")
             sys.stderr.flush()
             continue
-        if size > cap_bytes:
+        if cap_bytes is not None and size > cap_bytes:
             sys.stderr.write(f"skip {p.name}: size {size} exceeds cap {cap_bytes}\n")
             sys.stderr.flush()
             continue

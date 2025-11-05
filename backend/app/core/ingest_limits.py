@@ -1,19 +1,23 @@
-import os
 import logging
+
+from app.core.config import get_settings
 
 log = logging.getLogger(__name__)
 
 
 def ingest_cap_bytes() -> int:
-    raw = os.getenv("FILES_INGEST_MAX_MB", "50")
+    """Backward-compatible accessor for the ingestion cap in bytes.
+
+    Reads FILES_INGEST_MAX_MB from centralized settings (backend/.env auto-loaded).
+    Defaults to 50 MB when unset or invalid.
+    """
     try:
-        mb = float(raw)
-    except ValueError:
-        log.warning("FILES_INGEST_MAX_MB invalid=%r, defaulting to 50MB", raw)
+        s = get_settings()
+        mb = float(getattr(s, "FILES_INGEST_MAX_MB", 50.0) or 50.0)
+    except Exception:
         mb = 50.0
     if mb <= 0:
-        log.warning("FILES_INGEST_MAX_MB <= 0 (%r), defaulting to 50MB", raw)
         mb = 50.0
     cap = int(mb * 1024 * 1024)
-    log.info("INGEST_CAP raw=%r parsed_mb=%.6f cap_bytes=%d", raw, mb, cap)
+    log.info("INGEST_CAP mb=%.6f cap_bytes=%d", mb, cap)
     return cap

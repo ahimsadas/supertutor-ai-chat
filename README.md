@@ -125,8 +125,16 @@ Student-facing frontend and an admin CLI for data ingestion. No authentication y
   # {"ok": true, "service": "supertutor-backend"}
   ```
  - Notes:
+  - Config auto-loads from `backend/.env` for both the FastAPI server and all CLI entrypoints (via pydantic-settings). You do not need to export variables in your shell.
   - OpenAI API key is required when running the ingestion job runner to generate embeddings (model `text-embedding-3-small`). Set `OPENAI_API_KEY` in `backend/.env`. Other provider keys (Anthropic/Google/DeepSeek/xAI) remain optional for later steps.
   - Supabase server-only variables `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required only when you actually request a Supabase client in code.
+  - Upload/ingestion caps:
+    - `FILES_UPLOAD_MAX_MB` (float | empty) — optional router/HTTP preflight cap. Leave empty for no router cap.
+    - `FILES_INGEST_MAX_MB` (float) — runner/ingestion cap. Files over this are marked `ingestion_failed='size_cap'` and skipped by the runner.
+  - Embeddings:
+    - `EMBEDDING_MODEL` (default `text-embedding-3-small`)
+    - `EMBEDDING_BATCH_SIZE` (default `64`)
+    - `EMBEDDING_DIM` (default `1536`)
 
 ### Languages (registry-based)
 
@@ -138,7 +146,7 @@ Student-facing frontend and an admin CLI for data ingestion. No authentication y
 
 - A minimal Typer-based CLI is available to manage curricula via the REST API.
 - Module: `backend/app/cli/curricula.py` (run with `python -m app.cli.curricula ...` from `backend/`).
-- Base URL is read from env `BACKEND_BASE_URL` (default `http://localhost:8000`).
+- Base URL comes from settings `BACKEND_BASE_URL` (in `backend/.env`, default `http://localhost:8000`).
 
 Examples:
 
@@ -166,8 +174,8 @@ Exit codes:
 
 - A Typer-based CLI to upload source documents to the backend ingestion route.
 - Module: `backend/app/cli/ingest.py` (run with `python -m app.cli.ingest ...` from `backend/`).
-- Base URL is read from env `BACKEND_BASE_URL` (default `http://localhost:8000`).
-- Local size cap is read from env `FILES_INGEST_MAX_MB` (float supported, default `50`).
+- Base URL comes from settings `BACKEND_BASE_URL` (in `backend/.env`, default `http://localhost:8000`).
+- Optional local preflight cap mirrors the router cap via `FILES_UPLOAD_MAX_MB` (float). Leave empty to disable CLI preflight.
 
 Examples:
 
@@ -175,8 +183,8 @@ Examples:
 # Upload one or more files to a curriculum
 python -m app.cli.ingest upload --curriculum-id <uuid> ./samples/a.pdf ./samples/b.txt
 
-# With a smaller local cap (100KB)
-FILES_INGEST_MAX_MB=0.1 python -m app.cli.ingest upload --curriculum-id <uuid> ./samples/a.pdf
+# With a smaller local cap (100KB) using the router-aligned setting
+FILES_UPLOAD_MAX_MB=0.1 python -m app.cli.ingest upload --curriculum-id <uuid> ./samples/a.pdf
 ```
 
 Behavior:
@@ -184,6 +192,7 @@ Behavior:
 - Only .pdf and .txt are accepted by the CLI and server.
 - The CLI streams and prints each file's sha256 before sending.
 - On server success, prints the JSON response (including `deduped` and `ingestion_status`).
+- Global storage dedupe at ingest: when any existing file in any curriculum shares the same `sha256`, the server reuses its `storage_key` (no re-upload) and returns `clone_from_file_id`; if all accepted files reused storage, `ingestion_status` will be `"clone-from"`.
 - If the server path is missing, prints a helpful 404 message.
 
 
@@ -217,6 +226,12 @@ Exit codes:
 - Persistence: inserts rows into `public.chunks` with `embedding vector(1536)`; updates `files.pages` if the DB value is `NULL`.
 - Idempotent: if any rows already exist in `public.chunks` for a file, the runner skips re-inserting.
 - Optional env overrides: `CHUNK_SIZE_CHARS` (default 500), `CHUNK_OVERLAP_CHARS` (default 60).
+
+Rule enforcement:
+
+- Dedupe: for files with identical `sha256`, chunks are cloned from an existing source (no re-embedding).
+- OCR triage: likely scanned PDFs are marked `needs_ocr=true` and skipped.
+- Size cap: files exceeding `FILES_INGEST_MAX_MB` are marked `ingestion_failed='size_cap'` and skipped.
 
 CLI usage:
 

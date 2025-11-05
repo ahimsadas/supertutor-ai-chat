@@ -4,33 +4,30 @@ from typing import BinaryIO, Dict, Optional
 from logging import getLogger
 
 from app.clients.supabase_client import get_supabase_client
-from app.core.ingest_limits import ingest_cap_bytes
 
 
 logger = getLogger("supertutor.ingestion")
 
 
 class IngestionTooLargeError(Exception):
-    """Raised when an input file exceeds the configured size cap."""
+    """Reserved for future server-side checks; not raised by ingest_file."""
 
 
 def _cap_bytes() -> int:
-    # Backward compat wrapper; prefer ingest_cap_bytes()
+    # Deprecated: runner now enforces size caps. Keep for compatibility if needed.
+    from app.core.ingest_limits import ingest_cap_bytes
     return ingest_cap_bytes()
 
 
 def _enforce_size_cap(file_obj: BinaryIO, cap_bytes: int) -> int:
-    """Stream from file_obj and enforce size cap; return measured size in bytes.
+    """Deprecated: no-op size read. Runner enforces caps later.
 
-    Seeks to position 0 before and after. Raises IngestionTooLargeError if exceeded.
+    Returns the measured size for logging purposes only.
     """
     try:
         file_obj.seek(0)
-    except Exception as e:
-        logger.debug("ingest svc: seek(0) before read failed: %r", e)
-        # If seek fails, we still attempt a read from current position
+    except Exception:
         pass
-
     total = 0
     chunk_size = 1024 * 1024
     while True:
@@ -39,16 +36,12 @@ def _enforce_size_cap(file_obj: BinaryIO, cap_bytes: int) -> int:
             break
         total += len(chunk)
         if total > cap_bytes:
-            try:
-                file_obj.seek(0)
-            except Exception as e:
-                logger.debug("ingest svc: seek(0) after overflow failed: %r", e)
-            raise IngestionTooLargeError(f"size {total} exceeds cap {cap_bytes}")
-
+            # Do not raise; runner will mark size_cap using DB metadata
+            break
     try:
         file_obj.seek(0)
-    except Exception as e:
-        logger.debug("ingest svc: seek(0) after read failed: %r", e)
+    except Exception:
+        pass
     return total
 
 
@@ -64,10 +57,13 @@ def ingest_file(
     Returns:
         {"file_id": "<uuid>", "needs_processing": bool, "deduped": bool}
     """
-    cap_bytes = ingest_cap_bytes()
-    logger.info("ingest svc: fname=%s cap_bytes=%d", filename, cap_bytes)
-    size = _enforce_size_cap(file_obj, cap_bytes)
-    logger.info("ingest svc: fname=%s total_read=%d", filename, size)
+    # Service no longer enforces ingestion caps; runner handles size_cap.
+    # We still measure size best-effort for logging only.
+    try:
+        size = _enforce_size_cap(file_obj, _cap_bytes())
+    except Exception:
+        size = -1
+    logger.info("ingest svc: fname=%s total_read=%d (cap deferred to runner)", filename, size)
 
     # Placeholder OCR decision: PDFs default to needs_ocr=False for now.
     needs_ocr = False
